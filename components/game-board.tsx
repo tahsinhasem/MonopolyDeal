@@ -163,11 +163,11 @@ export function GameBoard({
 
   const createLogEntry = (
     action: {
-      type: string
-      playerId: string
-      targetId?: string
-      cardId?: string
-      timestamp: number
+      type: string;
+      playerId: string;
+      targetId?: string;
+      cardId?: string;
+      timestamp: number;
     },
     player: Player,
     targetPlayer: Player | null
@@ -265,11 +265,11 @@ export function GameBoard({
 
   const createAnimation = (
     action: {
-      type: string
-      playerId: string
-      targetId?: string
-      cardId?: string
-      timestamp: number
+      type: string;
+      playerId: string;
+      targetId?: string;
+      cardId?: string;
+      timestamp: number;
     },
     player: Player,
     _targetPlayer: Player | null
@@ -859,27 +859,40 @@ export function GameBoard({
                   </span>
                 )}
               </h3>
-              
+
               {/* Pagination Controls */}
               {currentPlayer.hand.length > 6 && (
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setHandCurrentPage(Math.max(0, handCurrentPage - 1))}
+                    onClick={() =>
+                      setHandCurrentPage(Math.max(0, handCurrentPage - 1))
+                    }
                     disabled={handCurrentPage === 0}
                     className="px-2 py-1 h-8"
                   >
                     ←
                   </Button>
                   <span className="text-sm text-gray-600 px-2">
-                    {handCurrentPage + 1}/{Math.ceil(currentPlayer.hand.length / 6)}
+                    {handCurrentPage + 1}/
+                    {Math.ceil(currentPlayer.hand.length / 6)}
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setHandCurrentPage(Math.min(Math.ceil(currentPlayer.hand.length / 6) - 1, handCurrentPage + 1))}
-                    disabled={handCurrentPage >= Math.ceil(currentPlayer.hand.length / 6) - 1}
+                    onClick={() =>
+                      setHandCurrentPage(
+                        Math.min(
+                          Math.ceil(currentPlayer.hand.length / 6) - 1,
+                          handCurrentPage + 1
+                        )
+                      )
+                    }
+                    disabled={
+                      handCurrentPage >=
+                      Math.ceil(currentPlayer.hand.length / 6) - 1
+                    }
                     className="px-2 py-1 h-8"
                   >
                     →
@@ -887,7 +900,7 @@ export function GameBoard({
                 </div>
               )}
             </div>
-            
+
             {/* Paginated Hand Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 justify-items-center">
               {currentPlayer.hand
@@ -903,16 +916,18 @@ export function GameBoard({
                   />
                 ))}
             </div>
-            
+
             {/* Page indicator dots */}
             {currentPlayer.hand.length > 6 && (
               <div className="flex justify-center mt-3 gap-1">
-                {Array.from({ length: Math.ceil(currentPlayer.hand.length / 6) }).map((_, index) => (
+                {Array.from({
+                  length: Math.ceil(currentPlayer.hand.length / 6),
+                }).map((_, index) => (
                   <button
                     key={index}
                     onClick={() => setHandCurrentPage(index)}
                     className={`w-2 h-2 rounded-full transition-colors ${
-                      index === handCurrentPage ? 'bg-blue-600' : 'bg-gray-300'
+                      index === handCurrentPage ? "bg-blue-600" : "bg-gray-300"
                     }`}
                   />
                 ))}

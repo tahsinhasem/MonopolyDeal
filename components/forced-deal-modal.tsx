@@ -1,19 +1,24 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { GameCard } from "./card"
-import type { Player } from "@/lib/types"
-import { PROPERTY_COLORS } from "@/lib/cards"
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { GameCard } from "./card";
+import type { Player } from "@/lib/types";
+import { PROPERTY_COLORS } from "@/lib/cards";
 
 interface ForcedDealModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onConfirm: (myPropertyId: string, targetPropertyId: string) => void
-  currentPlayer: Player
-  targetPlayer: Player | null
-  targetPlayerName: string
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (myPropertyId: string, targetPropertyId: string) => void;
+  currentPlayer: Player;
+  targetPlayer: Player | null;
+  targetPlayerName: string;
 }
 
 export function ForcedDealModal({
@@ -24,25 +29,30 @@ export function ForcedDealModal({
   targetPlayer,
   targetPlayerName,
 }: ForcedDealModalProps) {
-  const [selectedMyProperty, setSelectedMyProperty] = useState<string>("")
-  const [selectedTargetProperty, setSelectedTargetProperty] = useState<string>("")
+  const [selectedMyProperty, setSelectedMyProperty] = useState<string>("");
+  const [selectedTargetProperty, setSelectedTargetProperty] =
+    useState<string>("");
 
   // Add early return if required data is not available
   if (!currentPlayer || !targetPlayer) {
-    return null
+    return null;
   }
 
   const getAvailableProperties = (player: Player) => {
     // Add null check for player
     if (!player || !player.properties) {
-      return []
+      return [];
     }
 
-    const availableProperties: Array<{ cardId: string; color: string; colorName: string }> = []
+    const availableProperties: Array<{
+      cardId: string;
+      color: string;
+      colorName: string;
+    }> = [];
 
     Object.entries(player.properties).forEach(([color, cardIds]) => {
-      const colorInfo = PROPERTY_COLORS[color as keyof typeof PROPERTY_COLORS]
-      const isCompleteSet = colorInfo && cardIds.length === colorInfo.count
+      const colorInfo = PROPERTY_COLORS[color as keyof typeof PROPERTY_COLORS];
+      const isCompleteSet = colorInfo && cardIds.length === colorInfo.count;
 
       // Can't trade properties from complete sets
       if (!isCompleteSet) {
@@ -51,50 +61,55 @@ export function ForcedDealModal({
             cardId,
             color,
             colorName: colorInfo?.name || color,
-          })
-        })
+          });
+        });
       }
-    })
+    });
 
-    return availableProperties
-  }
+    return availableProperties;
+  };
 
-  const myAvailableProperties = getAvailableProperties(currentPlayer)
-  const targetAvailableProperties = getAvailableProperties(targetPlayer)
+  const myAvailableProperties = getAvailableProperties(currentPlayer);
+  const targetAvailableProperties = getAvailableProperties(targetPlayer);
 
   const handleConfirm = () => {
     if (selectedMyProperty && selectedTargetProperty) {
-      onConfirm(selectedMyProperty, selectedTargetProperty)
-      handleClose()
+      onConfirm(selectedMyProperty, selectedTargetProperty);
+      handleClose();
     }
-  }
+  };
 
   const handleClose = () => {
-    setSelectedMyProperty("")
-    setSelectedTargetProperty("")
-    onClose()
-  }
+    setSelectedMyProperty("");
+    setSelectedTargetProperty("");
+    onClose();
+  };
 
-  const canConfirm = selectedMyProperty && selectedTargetProperty
+  const canConfirm = selectedMyProperty && selectedTargetProperty;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Forced Deal with {targetPlayerName}</DialogTitle>
+          <DialogTitle className="text-xl font-bold">
+            Forced Deal with {targetPlayerName}
+          </DialogTitle>
           <p className="text-gray-600">
-            Select one of your properties and one of {targetPlayerName}&apos;s properties to trade. You cannot trade
-            properties from complete sets.
+            Select one of your properties and one of {targetPlayerName}&apos;s
+            properties to trade. You cannot trade properties from complete sets.
           </p>
         </DialogHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Your Properties */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">Your Properties (Select One)</h3>
+            <h3 className="text-lg font-semibold mb-4">
+              Your Properties (Select One)
+            </h3>
             {myAvailableProperties.length === 0 ? (
               <p className="text-gray-500 text-center py-8">
-                You have no properties available for trading. (Complete sets cannot be traded)
+                You have no properties available for trading. (Complete sets
+                cannot be traded)
               </p>
             ) : (
               <div className="grid grid-cols-2 gap-3">
@@ -109,7 +124,9 @@ export function ForcedDealModal({
                     onClick={() => setSelectedMyProperty(property.cardId)}
                   >
                     <GameCard cardId={property.cardId} size="medium" />
-                    <p className="text-xs text-center mt-1 font-medium capitalize">{property.colorName}</p>
+                    <p className="text-xs text-center mt-1 font-medium capitalize">
+                      {property.colorName}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -118,10 +135,13 @@ export function ForcedDealModal({
 
           {/* Target Player's Properties */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">{targetPlayerName}&apos;s Properties (Select One)</h3>
+            <h3 className="text-lg font-semibold mb-4">
+              {targetPlayerName}&apos;s Properties (Select One)
+            </h3>
             {targetAvailableProperties.length === 0 ? (
               <p className="text-gray-500 text-center py-8">
-                {targetPlayerName} has no properties available for trading. (Complete sets cannot be traded)
+                {targetPlayerName} has no properties available for trading.
+                (Complete sets cannot be traded)
               </p>
             ) : (
               <div className="grid grid-cols-2 gap-3">
@@ -136,7 +156,9 @@ export function ForcedDealModal({
                     onClick={() => setSelectedTargetProperty(property.cardId)}
                   >
                     <GameCard cardId={property.cardId} size="medium" />
-                    <p className="text-xs text-center mt-1 font-medium capitalize">{property.colorName}</p>
+                    <p className="text-xs text-center mt-1 font-medium capitalize">
+                      {property.colorName}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -181,11 +203,15 @@ export function ForcedDealModal({
           <Button onClick={handleClose} variant="outline">
             Cancel
           </Button>
-          <Button onClick={handleConfirm} disabled={!canConfirm} className="bg-green-600 hover:bg-green-700">
+          <Button
+            onClick={handleConfirm}
+            disabled={!canConfirm}
+            className="bg-green-600 hover:bg-green-700"
+          >
             Confirm Trade
           </Button>
         </div>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

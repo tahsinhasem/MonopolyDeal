@@ -1,41 +1,46 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import type { GameState, Player } from "@/lib/types"
-import { GameCard, CardBack } from "./card"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { getCard, PROPERTY_COLORS } from "@/lib/cards"
-import { ForcedDealModal } from "./forced-deal-modal"
-import { PropertySelectionModal } from "./property-selection-modal"
-import { GameAnimation } from "./game-animation"
-import { GameLogs } from "./game-logs"
+import { useState, useEffect } from "react";
+import type { GameState, Player } from "@/lib/types";
+import { GameCard, CardBack } from "./card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { getCard, PROPERTY_COLORS } from "@/lib/cards";
+import { ForcedDealModal } from "./forced-deal-modal";
+import { PropertySelectionModal } from "./property-selection-modal";
+import { GameAnimation } from "./game-animation";
+import { GameLogs } from "./game-logs";
 
 interface GameBoardProps {
-  game: GameState
-  currentUserId: string
-  onDrawCards: () => void
-  onPlayCard: (cardIds: string[], action: string, targetId?: string, propertyColor?: string) => void
-  onEndTurn: () => void
-  onDiscardCards: (cardIds: string[]) => void
-  rejoiningMessage?: string
+  game: GameState;
+  currentUserId: string;
+  onDrawCards: () => void;
+  onPlayCard: (
+    cardIds: string[],
+    action: string,
+    targetId?: string,
+    propertyColor?: string
+  ) => void;
+  onEndTurn: () => void;
+  onDiscardCards: (cardIds: string[]) => void;
+  rejoiningMessage?: string;
 }
 
 interface GameLog {
-  id: string
-  timestamp: number
-  type: string
-  playerName: string
-  message: string
-  emoji: string
+  id: string;
+  timestamp: number;
+  type: string;
+  playerName: string;
+  message: string;
+  emoji: string;
 }
 
 interface Animation {
-  type: string
-  emoji: string
-  message: string
-  playerName: string
+  type: string;
+  emoji: string;
+  message: string;
+  playerName: string;
 }
 
 export function GameBoard({
@@ -47,78 +52,116 @@ export function GameBoard({
   onDiscardCards,
   rejoiningMessage,
 }: GameBoardProps) {
-  const [selectedCards, setSelectedCards] = useState<string[]>([])
-  const [selectedPropertyColor, setSelectedPropertyColor] = useState<string>("")
-  const [selectedTargetPlayer, setSelectedTargetPlayer] = useState<string>("")
-  const [showColorPicker, setShowColorPicker] = useState(false)
-  const [showTargetPicker, setShowTargetPicker] = useState(false)
-  const [showPropertyPicker, setShowPropertyPicker] = useState(false)
-  const [showForcedDealModal, setShowForcedDealModal] = useState(false)
-  const [showPropertySelectionModal, setShowPropertySelectionModal] = useState(false)
-  const [logs, setLogs] = useState<GameLog[]>([])
-  const [currentAnimation, setCurrentAnimation] = useState<Animation | null>(null)
-  const [lastActionId, setLastActionId] = useState<string>("")
+  const [selectedCards, setSelectedCards] = useState<string[]>([]);
+  const [selectedPropertyColor, setSelectedPropertyColor] =
+    useState<string>("");
+  const [selectedTargetPlayer, setSelectedTargetPlayer] = useState<string>("");
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showTargetPicker, setShowTargetPicker] = useState(false);
+  const [showPropertyPicker, setShowPropertyPicker] = useState(false);
+  const [showForcedDealModal, setShowForcedDealModal] = useState(false);
+  const [showPropertySelectionModal, setShowPropertySelectionModal] =
+    useState(false);
+  const [logs, setLogs] = useState<GameLog[]>([]);
+  const [currentAnimation, setCurrentAnimation] = useState<Animation | null>(
+    null
+  );
+  const [lastActionId, setLastActionId] = useState<string>("");
+  const [shownAnimations, setShownAnimations] = useState<Set<string>>(
+    new Set()
+  );
+  const [shownCompletedSets, setShownCompletedSets] = useState<Set<string>>(
+    new Set()
+  );
+  const [shownWildcardAnimations, setShownWildcardAnimations] = useState<
+    Set<string>
+  >(new Set());
 
-  const currentPlayer = game.players[currentUserId]
-  const isCurrentTurn = game.currentTurnPlayerId === currentUserId
-  const otherPlayers = Object.values(game.players).filter((p) => p.uid !== currentUserId)
+  const currentPlayer = game.players[currentUserId];
+  const isCurrentTurn = game.currentTurnPlayerId === currentUserId;
+  const otherPlayers = Object.values(game.players).filter(
+    (p) => p.uid !== currentUserId
+  );
 
   // Handle game state changes for logs and animations
   useEffect(() => {
-    if (game.lastAction && game.lastAction.timestamp.toString() !== lastActionId) {
-      setLastActionId(game.lastAction.timestamp.toString())
+    if (
+      game.lastAction &&
+      game.lastAction.timestamp.toString() !== lastActionId
+    ) {
+      setLastActionId(game.lastAction.timestamp.toString());
 
-      const player = game.players[game.lastAction.playerId]
-      const targetPlayer = game.lastAction.targetId ? game.players[game.lastAction.targetId] : null
+      const player = game.players[game.lastAction.playerId];
+      const targetPlayer = game.lastAction.targetId
+        ? game.players[game.lastAction.targetId]
+        : null;
 
       if (player) {
-        const logEntry = createLogEntry(game.lastAction, player, targetPlayer)
-        const animation = createAnimation(game.lastAction, player, targetPlayer)
+        const logEntry = createLogEntry(game.lastAction, player, targetPlayer);
+        const animation = createAnimation(
+          game.lastAction,
+          player,
+          targetPlayer
+        );
 
         if (logEntry) {
-          setLogs((prev) => [...prev, logEntry].slice(-50)) // Keep last 50 logs
+          setLogs((prev) => [...prev, logEntry].slice(-50)); // Keep last 50 logs
         }
 
-        if (animation) {
-          setCurrentAnimation(animation)
+        // Only show animation if we haven't shown it for this action already
+        if (
+          animation &&
+          game.lastAction &&
+          !shownAnimations.has(game.lastAction.timestamp.toString())
+        ) {
+          setCurrentAnimation(animation);
+          setShownAnimations(
+            (prev) => new Set([...prev, game.lastAction!.timestamp.toString()])
+          );
         }
       }
     }
-  }, [game.lastAction, game.players, lastActionId])
+  }, [game.lastAction, game.players, lastActionId, shownAnimations]);
 
   // Check for completed sets and show celebration
   useEffect(() => {
     Object.values(game.players).forEach((player) => {
-      const playerPropertySets = getPlayerPropertySets(player)
-      const completedSets = playerPropertySets.filter((set) => set.isComplete)
+      const playerPropertySets = getPlayerPropertySets(player);
+      const completedSets = playerPropertySets.filter((set) => set.isComplete);
 
-      if (completedSets.length > 0) {
-        // Check if this is a new completion (you might want to track this better)
-        const hasNewCompletion = completedSets.some((set) => {
-          // This is a simplified check - in a real app you'd track previous state
-          return true
-        })
+      completedSets.forEach((set) => {
+        const setKey = `${player.uid}-${set.color}`;
 
-        if (hasNewCompletion && player.uid !== currentUserId) {
-          // Show celebration for completed sets (but not spam it)
+        // Only show animation if this set completion hasn't been shown before
+        if (!shownCompletedSets.has(setKey) && player.uid !== currentUserId) {
+          setShownCompletedSets((prev) => new Set([...prev, setKey]));
+
+          // Show celebration for completed sets with a slight delay
           setTimeout(() => {
             if (!currentAnimation) {
               setCurrentAnimation({
                 type: "SET_COMPLETE",
                 emoji: "🎊",
-                message: "Completed a property set!",
+                message: `Completed ${set.color} property set!`,
                 playerName: player.displayName,
-              })
+              });
             }
-          }, 1000)
+          }, 1000);
         }
-      }
-    })
-  }, [game.players, currentUserId, currentAnimation])
+      });
+    });
+  }, [game.players, currentUserId, currentAnimation, shownCompletedSets]);
 
-  const createLogEntry = (action: any, player: Player, targetPlayer: Player | null): GameLog | null => {
-    const timestamp = action.timestamp
-    const id = `${timestamp}-${action.playerId}`
+  const createLogEntry = (
+    action: any,
+    player: Player,
+    targetPlayer: Player | null
+  ): GameLog | null => {
+    const timestamp = action.timestamp;
+    // Create a unique ID by including timestamp, player ID, action type, and random number
+    const id = `${timestamp}-${action.playerId}-${action.type}-${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
 
     switch (action.type) {
       case "It's My Birthday":
@@ -129,7 +172,7 @@ export function GameBoard({
           playerName: player.displayName,
           message: "celebrated their birthday! Everyone pays 2M",
           emoji: "🎉",
-        }
+        };
 
       case "Pass Go":
         return {
@@ -139,7 +182,7 @@ export function GameBoard({
           playerName: player.displayName,
           message: "passed GO and drew 2 cards",
           emoji: "🎯",
-        }
+        };
 
       case "Debt Collector":
         return {
@@ -147,9 +190,11 @@ export function GameBoard({
           timestamp,
           type: action.type,
           playerName: player.displayName,
-          message: `collected 5M debt from ${targetPlayer?.displayName || "someone"}`,
+          message: `collected 5M debt from ${
+            targetPlayer?.displayName || "someone"
+          }`,
           emoji: "💰",
-        }
+        };
 
       case "Sly Deal":
         return {
@@ -157,9 +202,11 @@ export function GameBoard({
           timestamp,
           type: action.type,
           playerName: player.displayName,
-          message: `stole a property from ${targetPlayer?.displayName || "someone"}`,
+          message: `stole a property from ${
+            targetPlayer?.displayName || "someone"
+          }`,
           emoji: "🕵️",
-        }
+        };
 
       case "Deal Breaker":
         return {
@@ -167,9 +214,11 @@ export function GameBoard({
           timestamp,
           type: action.type,
           playerName: player.displayName,
-          message: `broke a deal and stole a complete set from ${targetPlayer?.displayName || "someone"}`,
+          message: `broke a deal and stole a complete set from ${
+            targetPlayer?.displayName || "someone"
+          }`,
           emoji: "💥",
-        }
+        };
 
       case "Forced Deal":
         return {
@@ -177,9 +226,11 @@ export function GameBoard({
           timestamp,
           type: action.type,
           playerName: player.displayName,
-          message: `forced a property trade with ${targetPlayer?.displayName || "someone"}`,
+          message: `forced a property trade with ${
+            targetPlayer?.displayName || "someone"
+          }`,
           emoji: "🤝",
-        }
+        };
 
       case "Rent":
       case "Wild Rent":
@@ -190,14 +241,18 @@ export function GameBoard({
           playerName: player.displayName,
           message: `charged rent to ${targetPlayer?.displayName || "someone"}`,
           emoji: "🏠",
-        }
+        };
 
       default:
-        return null
+        return null;
     }
-  }
+  };
 
-  const createAnimation = (action: any, player: Player, targetPlayer: Player | null): Animation | null => {
+  const createAnimation = (
+    action: any,
+    player: Player,
+    targetPlayer: Player | null
+  ): Animation | null => {
     switch (action.type) {
       case "It's My Birthday":
         return {
@@ -205,7 +260,7 @@ export function GameBoard({
           emoji: "🎉",
           message: "It's My Birthday!",
           playerName: player.displayName,
-        }
+        };
 
       case "Pass Go":
         return {
@@ -213,7 +268,7 @@ export function GameBoard({
           emoji: "🎯",
           message: "Passed GO!",
           playerName: player.displayName,
-        }
+        };
 
       case "Debt Collector":
         return {
@@ -221,7 +276,7 @@ export function GameBoard({
           emoji: "💰",
           message: "Debt Collector!",
           playerName: player.displayName,
-        }
+        };
 
       case "Sly Deal":
         return {
@@ -229,7 +284,7 @@ export function GameBoard({
           emoji: "🕵️",
           message: "Sly Deal!",
           playerName: player.displayName,
-        }
+        };
 
       case "Deal Breaker":
         return {
@@ -237,7 +292,7 @@ export function GameBoard({
           emoji: "💥",
           message: "Deal Breaker!",
           playerName: player.displayName,
-        }
+        };
 
       case "Forced Deal":
         return {
@@ -245,7 +300,7 @@ export function GameBoard({
           emoji: "🤝",
           message: "Forced Deal!",
           playerName: player.displayName,
-        }
+        };
 
       case "Rent":
       case "Wild Rent":
@@ -254,184 +309,230 @@ export function GameBoard({
           emoji: "🏠",
           message: action.type === "Wild Rent" ? "Wild Rent!" : "Rent!",
           playerName: player.displayName,
-        }
+        };
 
       default:
-        return null
+        return null;
     }
-  }
+  };
 
   const toggleCardSelection = (cardId: string) => {
     if (selectedCards.includes(cardId)) {
-      resetSelection()
+      resetSelection();
     } else {
-      setSelectedCards([cardId])
-      const card = getCard(cardId)
+      setSelectedCards([cardId]);
+      const card = getCard(cardId);
 
       // Reset all selections
-      setShowColorPicker(false)
-      setShowTargetPicker(false)
-      setShowPropertyPicker(false)
-      setSelectedPropertyColor("")
-      setSelectedTargetPlayer("")
+      setShowColorPicker(false);
+      setShowTargetPicker(false);
+      setShowPropertyPicker(false);
+      setSelectedPropertyColor("");
+      setSelectedTargetPlayer("");
 
       if (card) {
         // Check if it's a wildcard property that needs color selection
         if (card.type === "property" && card.colors && card.colors.length > 1) {
-          setShowColorPicker(true)
-          // Show wildcard animation
-          setCurrentAnimation({
-            type: "WILDCARD",
-            emoji: "🌈",
-            message: "Wildcard Property!",
-            playerName: currentPlayer.displayName,
-          })
+          setShowColorPicker(true);
+          // Show wildcard animation only once per card
+          if (!shownWildcardAnimations.has(cardId)) {
+            setCurrentAnimation({
+              type: "WILDCARD",
+              emoji: "🌈",
+              message: "Wildcard Property!",
+              playerName: currentPlayer.displayName,
+            });
+            setShownWildcardAnimations((prev) => new Set([...prev, cardId]));
+          }
         }
 
         // Check if it's an action card that needs target selection
         if (card.type === "action" || card.type === "rent") {
           if (needsTargetSelection(card.name)) {
-            setShowTargetPicker(true)
+            setShowTargetPicker(true);
           }
-          if (needsPropertySelection(card.name) && !usesModalForPropertySelection(card.name)) {
-            setShowPropertyPicker(true)
+          if (
+            needsPropertySelection(card.name) &&
+            !usesModalForPropertySelection(card.name)
+          ) {
+            setShowPropertyPicker(true);
           }
         }
       }
     }
-  }
+  };
 
   const resetSelection = () => {
-    setSelectedCards([])
-    setShowColorPicker(false)
-    setShowTargetPicker(false)
-    setShowPropertyPicker(false)
-    setSelectedPropertyColor("")
-    setSelectedTargetPlayer("")
-    setShowForcedDealModal(false)
-    setShowPropertySelectionModal(false)
-  }
+    setSelectedCards([]);
+    setShowColorPicker(false);
+    setShowTargetPicker(false);
+    setShowPropertyPicker(false);
+    setSelectedPropertyColor("");
+    setSelectedTargetPlayer("");
+    setShowForcedDealModal(false);
+    setShowPropertySelectionModal(false);
+  };
 
   const needsTargetSelection = (cardName: string): boolean => {
-    return ["Debt Collector", "Sly Deal", "Deal Breaker", "Forced Deal", "Rent", "Wild Rent"].includes(cardName)
-  }
+    return [
+      "Debt Collector",
+      "Sly Deal",
+      "Deal Breaker",
+      "Forced Deal",
+      "Rent",
+      "Wild Rent",
+    ].includes(cardName);
+  };
 
   const needsPropertySelection = (cardName: string): boolean => {
-    return ["Sly Deal", "Deal Breaker", "Rent", "Wild Rent"].includes(cardName)
-  }
+    return ["Sly Deal", "Deal Breaker", "Rent", "Wild Rent"].includes(cardName);
+  };
 
   const usesModalForPropertySelection = (cardName: string): boolean => {
-    return ["Sly Deal", "Deal Breaker"].includes(cardName)
-  }
+    return ["Sly Deal", "Deal Breaker"].includes(cardName);
+  };
 
   const getSelectedCard = () => {
     if (selectedCards.length === 1) {
-      return getCard(selectedCards[0])
+      return getCard(selectedCards[0]);
     }
-    return null
-  }
+    return null;
+  };
 
-  const selectedCard = getSelectedCard()
+  const selectedCard = getSelectedCard();
 
   const handlePlayAsMoney = () => {
     if (selectedCards.length === 1) {
-      onPlayCard(selectedCards, "PLAY_MONEY")
-      resetSelection()
+      onPlayCard(selectedCards, "PLAY_MONEY");
+      resetSelection();
     }
-  }
+  };
 
   const handlePlayAsProperty = () => {
     if (selectedCards.length === 1) {
-      let colorToUse = selectedPropertyColor
+      let colorToUse = selectedPropertyColor;
 
       // If not a wildcard, use the card's natural color
-      if (selectedCard?.type === "property" && selectedCard.color && !selectedCard.colors) {
-        colorToUse = selectedCard.color
+      if (
+        selectedCard?.type === "property" &&
+        selectedCard.color &&
+        !selectedCard.colors
+      ) {
+        colorToUse = selectedCard.color;
       }
 
       if (colorToUse) {
-        onPlayCard(selectedCards, "PLAY_PROPERTY", undefined, colorToUse)
-        resetSelection()
+        onPlayCard(selectedCards, "PLAY_PROPERTY", undefined, colorToUse);
+        resetSelection();
       }
     }
-  }
+  };
 
   const handlePlayAsAction = () => {
     if (selectedCards.length === 1 && selectedCard) {
       // Special handling for Forced Deal
       if (selectedCard.name === "Forced Deal") {
         if (!selectedTargetPlayer) {
-          return // Need target selection first
+          return; // Need target selection first
         }
-        setShowForcedDealModal(true)
-        return
+        setShowForcedDealModal(true);
+        return;
       }
 
       // Special handling for Sly Deal and Deal Breaker
-      if (selectedCard.name === "Sly Deal" || selectedCard.name === "Deal Breaker") {
+      if (
+        selectedCard.name === "Sly Deal" ||
+        selectedCard.name === "Deal Breaker"
+      ) {
         if (!selectedTargetPlayer) {
-          return // Need target selection first
+          return; // Need target selection first
         }
-        setShowPropertySelectionModal(true)
-        return
+        setShowPropertySelectionModal(true);
+        return;
       }
 
       // Check if all required selections are made for other action cards
       if (needsTargetSelection(selectedCard.name) && !selectedTargetPlayer) {
-        return // Need target selection
+        return; // Need target selection
       }
       if (needsPropertySelection(selectedCard.name) && !selectedPropertyColor) {
-        return // Need property selection
+        return; // Need property selection
       }
 
-      onPlayCard(selectedCards, "PLAY_ACTION", selectedTargetPlayer, selectedPropertyColor)
-      resetSelection()
+      onPlayCard(
+        selectedCards,
+        "PLAY_ACTION",
+        selectedTargetPlayer,
+        selectedPropertyColor
+      );
+      resetSelection();
     }
-  }
+  };
 
-  const handleForcedDealConfirm = (myPropertyId: string, targetPropertyId: string) => {
+  const handleForcedDealConfirm = (
+    myPropertyId: string,
+    targetPropertyId: string
+  ) => {
     if (selectedCards.length === 1) {
       // We'll pass both property IDs in the cardIds array for the Forced Deal
-      onPlayCard([selectedCards[0], myPropertyId, targetPropertyId], "PLAY_ACTION", selectedTargetPlayer)
-      resetSelection()
+      onPlayCard(
+        [selectedCards[0], myPropertyId, targetPropertyId],
+        "PLAY_ACTION",
+        selectedTargetPlayer
+      );
+      resetSelection();
     }
-  }
+  };
 
-  const handlePropertySelectionConfirm = (propertyId: string, propertyColor: string) => {
+  const handlePropertySelectionConfirm = (
+    propertyId: string,
+    propertyColor: string
+  ) => {
     if (selectedCards.length === 1) {
-      onPlayCard(selectedCards, "PLAY_ACTION", selectedTargetPlayer, propertyColor)
-      resetSelection()
+      onPlayCard(
+        selectedCards,
+        "PLAY_ACTION",
+        selectedTargetPlayer,
+        propertyColor
+      );
+      resetSelection();
     }
-  }
+  };
 
   const handleDiscard = () => {
     if (selectedCards.length > 0) {
-      onDiscardCards(selectedCards)
-      resetSelection()
+      onDiscardCards(selectedCards);
+      resetSelection();
     }
-  }
+  };
 
   const canPlayAsMoney = () => {
     return (
       selectedCard &&
-      (selectedCard.type === "money" || selectedCard.type === "action" || selectedCard.type === "property")
-    )
-  }
+      (selectedCard.type === "money" ||
+        selectedCard.type === "action" ||
+        selectedCard.type === "property")
+    );
+  };
 
   const canPlayAsProperty = () => {
-    if (!selectedCard || selectedCard.type !== "property") return false
+    if (!selectedCard || selectedCard.type !== "property") return false;
 
     // If it's a wildcard, need color selection
     if (selectedCard.colors && selectedCard.colors.length > 1) {
-      return selectedPropertyColor !== ""
+      return selectedPropertyColor !== "";
     }
 
     // If it's a regular property, can always play
-    return selectedCard.color !== undefined
-  }
+    return selectedCard.color !== undefined;
+  };
 
   const canPlayAsAction = () => {
-    if (!selectedCard || (selectedCard.type !== "action" && selectedCard.type !== "rent")) return false
+    if (
+      !selectedCard ||
+      (selectedCard.type !== "action" && selectedCard.type !== "rent")
+    )
+      return false;
 
     // Special cases for modal-based actions - only need target selection
     if (
@@ -439,21 +540,24 @@ export function GameBoard({
       selectedCard.name === "Sly Deal" ||
       selectedCard.name === "Deal Breaker"
     ) {
-      return selectedTargetPlayer !== ""
+      return selectedTargetPlayer !== "";
     }
 
     // Check if all required selections are made for other cards
-    if (needsTargetSelection(selectedCard.name) && !selectedTargetPlayer) return false
-    if (needsPropertySelection(selectedCard.name) && !selectedPropertyColor) return false
+    if (needsTargetSelection(selectedCard.name) && !selectedTargetPlayer)
+      return false;
+    if (needsPropertySelection(selectedCard.name) && !selectedPropertyColor)
+      return false;
 
-    return true
-  }
+    return true;
+  };
 
   const getPlayerPropertySets = (player: Player) => {
     return Object.entries(player.properties)
       .map(([color, cardIds]) => {
-        const colorInfo = PROPERTY_COLORS[color as keyof typeof PROPERTY_COLORS]
-        const isComplete = colorInfo && cardIds.length === colorInfo.count
+        const colorInfo =
+          PROPERTY_COLORS[color as keyof typeof PROPERTY_COLORS];
+        const isComplete = colorInfo && cardIds.length === colorInfo.count;
 
         return {
           color,
@@ -462,38 +566,40 @@ export function GameBoard({
           count: cardIds.length,
           maxCount: colorInfo?.count || 0,
           rentValues: colorInfo?.rentValues || [],
-        }
+        };
       })
-      .filter((set) => set.cards.length > 0)
-  }
+      .filter((set) => set.cards.length > 0);
+  };
 
   const getAvailablePropertyColors = () => {
     if (selectedCard?.name === "Rent" || selectedCard?.name === "Wild Rent") {
       // For rent cards, show colors the current player owns
-      return Object.keys(currentPlayer.properties).filter((color) => currentPlayer.properties[color].length > 0)
+      return Object.keys(currentPlayer.properties).filter(
+        (color) => currentPlayer.properties[color].length > 0
+      );
     }
-    return Object.keys(PROPERTY_COLORS)
-  }
+    return Object.keys(PROPERTY_COLORS);
+  };
 
   const getActionInstructions = () => {
-    if (!selectedCard) return ""
+    if (!selectedCard) return "";
 
     switch (selectedCard.name) {
       case "Forced Deal":
-        return "First select a target player above, then click 'Play Action' to choose properties to trade."
+        return "First select a target player above, then click 'Play Action' to choose properties to trade.";
       case "Sly Deal":
-        return "First select a target player above, then click 'Play Action' to choose which property to steal."
+        return "First select a target player above, then click 'Play Action' to choose which property to steal.";
       case "Deal Breaker":
-        return "First select a target player above, then click 'Play Action' to choose which complete set to steal."
+        return "First select a target player above, then click 'Play Action' to choose which complete set to steal.";
       case "Debt Collector":
-        return "Select a target player above to demand 5M from them."
+        return "Select a target player above to demand 5M from them.";
       case "Rent":
       case "Wild Rent":
-        return "Select a target player and property color to charge rent."
+        return "Select a target player and property color to charge rent.";
       default:
-        return ""
+        return "";
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-green-800 p-2 md:p-4">
@@ -501,15 +607,21 @@ export function GameBoard({
         {/* Game Header */}
         <div className="bg-white rounded-lg p-3 md:p-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl md:text-2xl font-bold truncate">Monopoly Deal</h1>
-            <p className="text-gray-600 text-sm truncate">Game Code: {game.gameCode}</p>
+            <h1 className="text-xl md:text-2xl font-bold truncate">
+              Monopoly Deal
+            </h1>
+            <p className="text-gray-600 text-sm truncate">
+              Game Code: {game.gameCode}
+            </p>
           </div>
           <div className="text-left sm:text-right min-w-0 flex-shrink-0">
             <p className="font-semibold text-sm md:text-base truncate">
-              Current Turn: {game.players[game.currentTurnPlayerId]?.displayName}
+              Current Turn:{" "}
+              {game.players[game.currentTurnPlayerId]?.displayName}
             </p>
             <p className="text-xs md:text-sm text-gray-600">
-              Phase: {game.turnPhase} | Cards Played: {game.cardsPlayedThisTurn}/3
+              Phase: {game.turnPhase} | Cards Played: {game.cardsPlayedThisTurn}
+              /3
             </p>
           </div>
         </div>
@@ -518,12 +630,17 @@ export function GameBoard({
         {game.lastAction && (
           <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-3 mb-4">
             <p className="text-sm">
-              <strong>{game.players[game.lastAction.playerId]?.displayName}</strong> played{" "}
-              <strong>{game.lastAction.type}</strong>
+              <strong>
+                {game.players[game.lastAction.playerId]?.displayName}
+              </strong>{" "}
+              played <strong>{game.lastAction.type}</strong>
               {game.lastAction.targetId && (
                 <>
                   {" "}
-                  on <strong>{game.players[game.lastAction.targetId]?.displayName}</strong>
+                  on{" "}
+                  <strong>
+                    {game.players[game.lastAction.targetId]?.displayName}
+                  </strong>
                 </>
               )}
             </p>
@@ -533,7 +650,9 @@ export function GameBoard({
         {/* Rejoining Message */}
         {rejoiningMessage && (
           <div className="bg-green-100 border border-green-300 rounded-lg p-3 mb-4">
-            <p className="text-green-800 text-center font-medium">{rejoiningMessage}</p>
+            <p className="text-green-800 text-center font-medium">
+              {rejoiningMessage}
+            </p>
           </div>
         )}
 
@@ -545,18 +664,27 @@ export function GameBoard({
                 <Card
                   key={player.uid}
                   className={`bg-white cursor-pointer transition-all min-w-0 ${
-                    selectedTargetPlayer === player.uid ? "ring-2 ring-blue-500" : ""
+                    selectedTargetPlayer === player.uid
+                      ? "ring-2 ring-blue-500"
+                      : ""
                   }`}
                   onClick={() => {
                     if (showTargetPicker) {
-                      setSelectedTargetPlayer(player.uid)
+                      setSelectedTargetPlayer(player.uid);
                     }
                   }}
                 >
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base md:text-lg flex items-center justify-between min-w-0">
-                      <span className="truncate flex-1 mr-2">{player.displayName}</span>
-                      <Badge variant={player.completedSets >= 3 ? "default" : "secondary"} className="flex-shrink-0">
+                      <span className="truncate flex-1 mr-2">
+                        {player.displayName}
+                      </span>
+                      <Badge
+                        variant={
+                          player.completedSets >= 3 ? "default" : "secondary"
+                        }
+                        className="flex-shrink-0"
+                      >
                         {player.completedSets}/3 sets
                       </Badge>
                     </CardTitle>
@@ -564,10 +692,18 @@ export function GameBoard({
                   <CardContent className="min-w-0">
                     <div className="space-y-3">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-medium flex-shrink-0">Hand:</span>
+                        <span className="text-sm font-medium flex-shrink-0">
+                          Hand:
+                        </span>
                         <div className="flex gap-1 overflow-hidden flex-1">
-                          {Array.from({ length: Math.min(player.hand.length, 3) }).map((_, i) => (
-                            <CardBack key={i} size="small" className="flex-shrink-0" />
+                          {Array.from({
+                            length: Math.min(player.hand.length, 3),
+                          }).map((_, i) => (
+                            <CardBack
+                              key={i}
+                              size="small"
+                              className="flex-shrink-0"
+                            />
                           ))}
                           {player.hand.length > 3 && (
                             <span className="text-xs text-gray-600 ml-1 whitespace-nowrap">
@@ -577,16 +713,23 @@ export function GameBoard({
                         </div>
                       </div>
 
-                      <div className="text-sm font-medium">Bank: ${player.bankValue}M</div>
+                      <div className="text-sm font-medium">
+                        Bank: ${player.bankValue}M
+                      </div>
 
                       {getPlayerPropertySets(player).map((set) => (
                         <div key={set.color} className="text-sm min-w-0">
                           <div className="flex justify-between items-center min-w-0">
                             <span className="font-medium capitalize truncate flex-1 mr-2">
-                              {PROPERTY_COLORS[set.color as keyof typeof PROPERTY_COLORS]?.name || set.color}:
+                              {PROPERTY_COLORS[
+                                set.color as keyof typeof PROPERTY_COLORS
+                              ]?.name || set.color}
+                              :
                             </span>
                             <span
-                              className={`${set.isComplete ? "text-green-600 font-bold" : ""} whitespace-nowrap flex-shrink-0`}
+                              className={`${
+                                set.isComplete ? "text-green-600 font-bold" : ""
+                              } whitespace-nowrap flex-shrink-0`}
                             >
                               {set.count}/{set.maxCount}
                               {set.isComplete && " ✓"}
@@ -594,7 +737,10 @@ export function GameBoard({
                           </div>
                           {set.isComplete && (
                             <div className="text-xs text-green-600 truncate">
-                              Rent: {set.rentValues.map((rent, i) => `${i + 1}=${rent}M`).join(", ")}
+                              Rent:{" "}
+                              {set.rentValues
+                                .map((rent, i) => `${i + 1}=${rent}M`)
+                                .join(", ")}
                             </div>
                           )}
                         </div>
@@ -617,8 +763,15 @@ export function GameBoard({
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold">Your Area</h2>
             <div className="flex items-center gap-4">
-              <span className="text-lg font-semibold">Bank: ${currentPlayer.bankValue}M</span>
-              <Badge variant={currentPlayer.completedSets >= 3 ? "default" : "secondary"} className="text-lg px-3 py-1">
+              <span className="text-lg font-semibold">
+                Bank: ${currentPlayer.bankValue}M
+              </span>
+              <Badge
+                variant={
+                  currentPlayer.completedSets >= 3 ? "default" : "secondary"
+                }
+                className="text-lg px-3 py-1"
+              >
                 {currentPlayer.completedSets}/3 sets
               </Badge>
             </div>
@@ -630,13 +783,20 @@ export function GameBoard({
               <h3 className="font-semibold mb-4 text-lg">Your Properties</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {getPlayerPropertySets(currentPlayer).map((set) => (
-                  <div key={set.color} className="border-2 rounded-lg p-4 bg-gray-50 min-w-0">
+                  <div
+                    key={set.color}
+                    className="border-2 rounded-lg p-4 bg-gray-50 min-w-0"
+                  >
                     <div className="flex justify-between items-center mb-3">
                       <span className="font-bold text-lg capitalize truncate flex-1 mr-2">
-                        {PROPERTY_COLORS[set.color as keyof typeof PROPERTY_COLORS]?.name || set.color}
+                        {PROPERTY_COLORS[
+                          set.color as keyof typeof PROPERTY_COLORS
+                        ]?.name || set.color}
                       </span>
                       <span
-                        className={`text-lg font-bold whitespace-nowrap ${set.isComplete ? "text-green-600" : "text-gray-600"}`}
+                        className={`text-lg font-bold whitespace-nowrap ${
+                          set.isComplete ? "text-green-600" : "text-gray-600"
+                        }`}
                       >
                         {set.count}/{set.maxCount}
                         {set.isComplete && " ✓"}
@@ -644,12 +804,20 @@ export function GameBoard({
                     </div>
                     {set.isComplete && (
                       <div className="text-sm text-green-600 font-medium mb-2 truncate">
-                        Rent: {set.rentValues.map((rent, i) => `${i + 1}=${rent}M`).join(", ")}
+                        Rent:{" "}
+                        {set.rentValues
+                          .map((rent, i) => `${i + 1}=${rent}M`)
+                          .join(", ")}
                       </div>
                     )}
                     <div className="flex gap-2 flex-wrap overflow-hidden">
                       {set.cards.map((cardId) => (
-                        <GameCard key={cardId} cardId={cardId} size="medium" className="flex-shrink-0" />
+                        <GameCard
+                          key={cardId}
+                          cardId={cardId}
+                          size="medium"
+                          className="flex-shrink-0"
+                        />
                       ))}
                     </div>
                   </div>
@@ -663,7 +831,9 @@ export function GameBoard({
             <h3 className="font-semibold mb-4 text-lg">
               Your Hand ({currentPlayer.hand.length}/7)
               {currentPlayer.hand.length > 7 && (
-                <span className="text-red-600 ml-2 font-bold">Must discard {currentPlayer.hand.length - 7} cards</span>
+                <span className="text-red-600 ml-2 font-bold">
+                  Must discard {currentPlayer.hand.length - 7} cards
+                </span>
               )}
             </h3>
             <div className="flex gap-3 flex-wrap overflow-x-auto pb-2">
@@ -685,7 +855,11 @@ export function GameBoard({
             {/* Turn Actions */}
             {isCurrentTurn && game.turnPhase === "draw" && (
               <div className="text-center">
-                <Button onClick={onDrawCards} size="lg" className="text-lg px-8 py-3">
+                <Button
+                  onClick={onDrawCards}
+                  size="lg"
+                  className="text-lg px-8 py-3"
+                >
                   Draw 2 Cards
                 </Button>
               </div>
@@ -694,7 +868,9 @@ export function GameBoard({
             {/* Card Play Options */}
             {selectedCard && isCurrentTurn && game.turnPhase === "play" && (
               <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                <h4 className="font-semibold mb-3 text-lg">Play Selected Card: {selectedCard.name}</h4>
+                <h4 className="font-semibold mb-3 text-lg">
+                  Play Selected Card: {selectedCard.name}
+                </h4>
 
                 {/* Action Instructions */}
                 {getActionInstructions() && (
@@ -708,13 +884,16 @@ export function GameBoard({
                 {/* Target Player Selection */}
                 {showTargetPicker && (
                   <div className="mb-4">
-                    <label className="block text-sm font-medium mb-2">Choose Target Player:</label>
+                    <label className="block text-sm font-medium mb-2">
+                      Choose Target Player:
+                    </label>
                     <div className="text-sm text-gray-600 mb-2">
                       Click on a player above to select them as the target
                     </div>
                     {selectedTargetPlayer && (
                       <div className="text-sm text-green-600">
-                        Selected: {game.players[selectedTargetPlayer]?.displayName}
+                        Selected:{" "}
+                        {game.players[selectedTargetPlayer]?.displayName}
                       </div>
                     )}
                   </div>
@@ -724,18 +903,29 @@ export function GameBoard({
                 {(showColorPicker || showPropertyPicker) && (
                   <div className="mb-4">
                     <label className="block text-sm font-medium mb-2">
-                      {showColorPicker ? "Choose Property Color:" : "Choose Property Color to Target:"}
+                      {showColorPicker
+                        ? "Choose Property Color:"
+                        : "Choose Property Color to Target:"}
                     </label>
                     <div className="flex gap-2 flex-wrap">
-                      {(showColorPicker ? selectedCard.colors || [] : getAvailablePropertyColors()).map((color) => (
+                      {(showColorPicker
+                        ? selectedCard.colors || []
+                        : getAvailablePropertyColors()
+                      ).map((color) => (
                         <Button
                           key={color}
                           onClick={() => setSelectedPropertyColor(color)}
-                          variant={selectedPropertyColor === color ? "default" : "outline"}
+                          variant={
+                            selectedPropertyColor === color
+                              ? "default"
+                              : "outline"
+                          }
                           size="sm"
                           className="capitalize"
                         >
-                          {PROPERTY_COLORS[color as keyof typeof PROPERTY_COLORS]?.name || color}
+                          {PROPERTY_COLORS[
+                            color as keyof typeof PROPERTY_COLORS
+                          ]?.name || color}
                         </Button>
                       ))}
                     </div>
@@ -766,7 +956,11 @@ export function GameBoard({
                   )}
 
                   {canPlayAsAction() && (
-                    <Button onClick={handlePlayAsAction} disabled={game.cardsPlayedThisTurn >= 3} size="lg">
+                    <Button
+                      onClick={handlePlayAsAction}
+                      disabled={game.cardsPlayedThisTurn >= 3}
+                      size="lg"
+                    >
                       ⚡ Play Action: {selectedCard.name}
                     </Button>
                   )}
@@ -789,7 +983,12 @@ export function GameBoard({
                 <h4 className="font-semibold mb-3 text-lg text-red-700">
                   You must discard {currentPlayer.hand.length - 7} cards
                 </h4>
-                <Button onClick={handleDiscard} disabled={selectedCards.length === 0} variant="destructive" size="lg">
+                <Button
+                  onClick={handleDiscard}
+                  disabled={selectedCards.length === 0}
+                  variant="destructive"
+                  size="lg"
+                >
                   Discard Selected ({selectedCards.length})
                 </Button>
               </div>
@@ -820,8 +1019,14 @@ export function GameBoard({
           onClose={() => setShowForcedDealModal(false)}
           onConfirm={handleForcedDealConfirm}
           currentPlayer={currentPlayer}
-          targetPlayer={selectedTargetPlayer ? game.players[selectedTargetPlayer] : null}
-          targetPlayerName={selectedTargetPlayer ? game.players[selectedTargetPlayer]?.displayName || "" : ""}
+          targetPlayer={
+            selectedTargetPlayer ? game.players[selectedTargetPlayer] : null
+          }
+          targetPlayerName={
+            selectedTargetPlayer
+              ? game.players[selectedTargetPlayer]?.displayName || ""
+              : ""
+          }
         />
 
         {/* Property Selection Modal (Sly Deal & Deal Breaker) */}
@@ -829,14 +1034,23 @@ export function GameBoard({
           isOpen={showPropertySelectionModal}
           onClose={() => setShowPropertySelectionModal(false)}
           onConfirm={handlePropertySelectionConfirm}
-          targetPlayer={selectedTargetPlayer ? game.players[selectedTargetPlayer] : null}
-          targetPlayerName={selectedTargetPlayer ? game.players[selectedTargetPlayer]?.displayName || "" : ""}
+          targetPlayer={
+            selectedTargetPlayer ? game.players[selectedTargetPlayer] : null
+          }
+          targetPlayerName={
+            selectedTargetPlayer
+              ? game.players[selectedTargetPlayer]?.displayName || ""
+              : ""
+          }
           actionType={selectedCard?.name as "Sly Deal" | "Deal Breaker"}
         />
 
         {/* Game Animation */}
-        <GameAnimation animation={currentAnimation} onComplete={() => setCurrentAnimation(null)} />
+        <GameAnimation
+          animation={currentAnimation}
+          onComplete={() => setCurrentAnimation(null)}
+        />
       </div>
     </div>
-  )
+  );
 }

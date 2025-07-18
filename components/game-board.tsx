@@ -272,7 +272,8 @@ export function GameBoard({
       timestamp: number;
     },
     player: Player,
-    _targetPlayer: Player | null
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    targetPlayer: Player | null
   ): Animation | null => {
     switch (action.type) {
       case "It's My Birthday":

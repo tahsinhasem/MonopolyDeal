@@ -838,7 +838,7 @@ export function GameBoard({
                         <GameCard
                           key={cardId}
                           cardId={cardId}
-                          size="medium"
+                          size="large"
                           className="flex-shrink-0"
                         />
                       ))}
@@ -910,7 +910,7 @@ export function GameBoard({
                   <GameCard
                     key={cardId}
                     cardId={cardId}
-                    size="medium"
+                    size="large"
                     isSelected={selectedCards.includes(cardId)}
                     onClick={() => toggleCardSelection(cardId)}
                     className="w-full max-w-32"

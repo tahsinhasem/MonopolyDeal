@@ -175,7 +175,7 @@ export function ForcedDealModal({
                 <p className="text-sm text-gray-600">You give:</p>
                 {selectedMyProperty ? (
                   <div className="mt-2">
-                    <GameCard cardId={selectedMyProperty} size="small" />
+                    <GameCard cardId={selectedMyProperty} size="medium" />
                   </div>
                 ) : (
                   <p className="text-gray-400 mt-2">Select a property</p>
@@ -188,7 +188,7 @@ export function ForcedDealModal({
                 <p className="text-sm text-gray-600">You get:</p>
                 {selectedTargetProperty ? (
                   <div className="mt-2">
-                    <GameCard cardId={selectedTargetProperty} size="small" />
+                    <GameCard cardId={selectedTargetProperty} size="medium" />
                   </div>
                 ) : (
                   <p className="text-gray-400 mt-2">Select a property</p>

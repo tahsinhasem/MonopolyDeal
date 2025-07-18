@@ -289,12 +289,10 @@ export function CardBack({
 }) {
   return (
     <Card className={`${getSizeClasses(size)} ${className}`}>
-      <CardContent className="p-2 h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-600 via-purple-600 to-blue-800 border-2 border-blue-700 text-white">
-        <div className="text-center">
-          <div className="text-2xl mb-2">🎲</div>
-          <div className="text-lg font-bold">Monopoly</div>
-          <div className="text-sm font-medium">DEAL</div>
-          <div className="text-xs mt-2 opacity-80">�</div>
+      <CardContent className="p-2 h-full flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-600 border-2 border-blue-700">
+        <div className="text-white text-center">
+          <div className="text-lg font-bold">Deal</div>
+          <div className="text-xs mt-1">🎲</div>
         </div>
       </CardContent>
     </Card>

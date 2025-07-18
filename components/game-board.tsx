@@ -76,6 +76,7 @@ export function GameBoard({
   const [shownWildcardAnimations, setShownWildcardAnimations] = useState<
     Set<string>
   >(new Set());
+  const [handCurrentPage, setHandCurrentPage] = useState<number>(0);
 
   const currentPlayer = game.players[currentUserId];
   const isCurrentTurn = game.currentTurnPlayerId === currentUserId;
@@ -152,8 +153,22 @@ export function GameBoard({
     });
   }, [game.players, currentUserId, currentAnimation, shownCompletedSets]);
 
+  // Reset hand page when hand size changes significantly
+  useEffect(() => {
+    const maxPage = Math.ceil(currentPlayer.hand.length / 6) - 1;
+    if (handCurrentPage > maxPage) {
+      setHandCurrentPage(Math.max(0, maxPage));
+    }
+  }, [currentPlayer.hand.length, handCurrentPage]);
+
   const createLogEntry = (
-    action: any,
+    action: {
+      type: string
+      playerId: string
+      targetId?: string
+      cardId?: string
+      timestamp: number
+    },
     player: Player,
     targetPlayer: Player | null
   ): GameLog | null => {
@@ -249,9 +264,15 @@ export function GameBoard({
   };
 
   const createAnimation = (
-    action: any,
+    action: {
+      type: string
+      playerId: string
+      targetId?: string
+      cardId?: string
+      timestamp: number
+    },
     player: Player,
-    targetPlayer: Player | null
+    _targetPlayer: Player | null
   ): Animation | null => {
     switch (action.type) {
       case "It's My Birthday":
@@ -371,6 +392,7 @@ export function GameBoard({
     setSelectedTargetPlayer("");
     setShowForcedDealModal(false);
     setShowPropertySelectionModal(false);
+    setHandCurrentPage(0); // Reset hand page when clearing selection
   };
 
   const needsTargetSelection = (cardName: string): boolean => {
@@ -754,7 +776,7 @@ export function GameBoard({
 
           {/* Game Logs */}
           <div className="lg:col-span-1">
-            <GameLogs game={game} logs={logs} />
+            <GameLogs logs={logs} />
           </div>
         </div>
 
@@ -828,26 +850,74 @@ export function GameBoard({
 
           {/* Hand */}
           <div className="mb-6">
-            <h3 className="font-semibold mb-4 text-lg">
-              Your Hand ({currentPlayer.hand.length}/7)
-              {currentPlayer.hand.length > 7 && (
-                <span className="text-red-600 ml-2 font-bold">
-                  Must discard {currentPlayer.hand.length - 7} cards
-                </span>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold text-lg">
+                Your Hand ({currentPlayer.hand.length}/7)
+                {currentPlayer.hand.length > 7 && (
+                  <span className="text-red-600 ml-2 font-bold text-sm">
+                    Must discard {currentPlayer.hand.length - 7} cards
+                  </span>
+                )}
+              </h3>
+              
+              {/* Pagination Controls */}
+              {currentPlayer.hand.length > 6 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setHandCurrentPage(Math.max(0, handCurrentPage - 1))}
+                    disabled={handCurrentPage === 0}
+                    className="px-2 py-1 h-8"
+                  >
+                    ←
+                  </Button>
+                  <span className="text-sm text-gray-600 px-2">
+                    {handCurrentPage + 1}/{Math.ceil(currentPlayer.hand.length / 6)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setHandCurrentPage(Math.min(Math.ceil(currentPlayer.hand.length / 6) - 1, handCurrentPage + 1))}
+                    disabled={handCurrentPage >= Math.ceil(currentPlayer.hand.length / 6) - 1}
+                    className="px-2 py-1 h-8"
+                  >
+                    →
+                  </Button>
+                </div>
               )}
-            </h3>
-            <div className="flex gap-3 flex-wrap overflow-x-auto pb-2">
-              {currentPlayer.hand.map((cardId) => (
-                <GameCard
-                  key={cardId}
-                  cardId={cardId}
-                  size="medium"
-                  isSelected={selectedCards.includes(cardId)}
-                  onClick={() => toggleCardSelection(cardId)}
-                  className="flex-shrink-0"
-                />
-              ))}
             </div>
+            
+            {/* Paginated Hand Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 justify-items-center">
+              {currentPlayer.hand
+                .slice(handCurrentPage * 6, (handCurrentPage + 1) * 6)
+                .map((cardId) => (
+                  <GameCard
+                    key={cardId}
+                    cardId={cardId}
+                    size="medium"
+                    isSelected={selectedCards.includes(cardId)}
+                    onClick={() => toggleCardSelection(cardId)}
+                    className="w-full max-w-32"
+                  />
+                ))}
+            </div>
+            
+            {/* Page indicator dots */}
+            {currentPlayer.hand.length > 6 && (
+              <div className="flex justify-center mt-3 gap-1">
+                {Array.from({ length: Math.ceil(currentPlayer.hand.length / 6) }).map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setHandCurrentPage(index)}
+                    className={`w-2 h-2 rounded-full transition-colors ${
+                      index === handCurrentPage ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Actions */}

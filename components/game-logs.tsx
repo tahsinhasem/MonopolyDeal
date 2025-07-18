@@ -5,10 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import type { GameState } from "@/lib/types";
 
 interface GameLogsProps {
-  game: GameState;
   logs: Array<{
     id: string;
     timestamp: number;
@@ -19,7 +17,7 @@ interface GameLogsProps {
   }>;
 }
 
-export function GameLogs({ game, logs }: GameLogsProps) {
+export function GameLogs({ logs }: GameLogsProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const formatTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString([], {

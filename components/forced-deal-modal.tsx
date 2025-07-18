@@ -83,7 +83,7 @@ export function ForcedDealModal({
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Forced Deal with {targetPlayerName}</DialogTitle>
           <p className="text-gray-600">
-            Select one of your properties and one of {targetPlayerName}'s properties to trade. You cannot trade
+            Select one of your properties and one of {targetPlayerName}&apos;s properties to trade. You cannot trade
             properties from complete sets.
           </p>
         </DialogHeader>
@@ -118,7 +118,7 @@ export function ForcedDealModal({
 
           {/* Target Player's Properties */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">{targetPlayerName}'s Properties (Select One)</h3>
+            <h3 className="text-lg font-semibold mb-4">{targetPlayerName}&apos;s Properties (Select One)</h3>
             {targetAvailableProperties.length === 0 ? (
               <p className="text-gray-500 text-center py-8">
                 {targetPlayerName} has no properties available for trading. (Complete sets cannot be traded)

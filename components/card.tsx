@@ -128,22 +128,22 @@ export function GameCard({
     >
       <CardContent className={`p-2 h-full flex flex-col ${getCardStyle()}`}>
         {/* Card Type Badge - Now more prominent */}
-        <div className="flex justify-center mb-2">
+        <div className="flex justify-center mb-1">
           <div
-            className={`${typeInfo.bgColor} text-white px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-sm`}
+            className={`${typeInfo.bgColor} text-white px-1.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 shadow-sm`}
           >
-            <span className="text-sm">{typeInfo.emoji}</span>
-            <span>{typeInfo.label}</span>
+            <span className="text-xs">{typeInfo.emoji}</span>
+            <span className="text-xs">{typeInfo.label}</span>
           </div>
         </div>
 
         {/* Card Header */}
         <div className="text-center flex-1 flex flex-col justify-center">
-          <div className="text-sm font-bold leading-tight mb-2 px-1">
+          <div className="text-xs font-bold leading-tight mb-1 px-1">
             {card.name}
           </div>
           {card.value && (
-            <div className="text-xl font-bold mb-2">${card.value}M</div>
+            <div className="text-lg font-bold mb-1">${card.value}M</div>
           )}
         </div>
 
@@ -151,8 +151,8 @@ export function GameCard({
         <div className="mt-auto">
           {/* Property-specific info */}
           {card.type === "property" && rentInfo && (
-            <div className="text-center text-xs space-y-1 px-1">
-              <div className="font-semibold text-sm">{rentInfo.colorName}</div>
+            <div className="text-center text-xs space-y-0.5 px-1">
+              <div className="font-semibold text-xs">{rentInfo.colorName}</div>
               <div className="text-xs opacity-80">
                 Set: {rentInfo.setSize} properties
               </div>
@@ -172,7 +172,7 @@ export function GameCard({
           {/* Wildcard info */}
           {card.type === "property" && card.colors && (
             <div className="text-center text-xs px-1">
-              <div className="font-semibold text-sm mb-1">
+              <div className="font-semibold text-xs mb-0.5">
                 Wildcard Property
               </div>
               {size !== "small" && (
@@ -195,7 +195,7 @@ export function GameCard({
           {/* Action card description */}
           {card.type === "action" && card.description && (
             <div className="text-center text-xs px-1">
-              <div className="font-semibold text-sm mb-1">Action Card</div>
+              <div className="font-semibold text-xs mb-0.5">Action Card</div>
               {size !== "small" && (
                 <div className="text-xs opacity-80 leading-tight">
                   {card.description.length > 40
@@ -209,7 +209,7 @@ export function GameCard({
           {/* Rent card info */}
           {card.type === "rent" && (
             <div className="text-center text-xs px-1">
-              <div className="font-semibold text-sm mb-1">Rent Card</div>
+              <div className="font-semibold text-xs mb-0.5">Rent Card</div>
               {size !== "small" && (
                 <>
                   {card.colors ? (
@@ -239,7 +239,7 @@ export function GameCard({
           {/* Money card info */}
           {card.type === "money" && (
             <div className="text-center text-xs">
-              <div className="font-semibold text-sm mb-1">Money Card</div>
+              <div className="font-semibold text-xs mb-0.5">Money Card</div>
               {size !== "small" && (
                 <div className="text-xs opacity-80">Add to bank value</div>
               )}
@@ -249,7 +249,7 @@ export function GameCard({
           {/* House/Hotel info */}
           {(card.type === "house" || card.type === "hotel") && (
             <div className="text-center text-xs px-1">
-              <div className="font-semibold text-sm mb-1">
+              <div className="font-semibold text-xs mb-0.5">
                 {card.type === "house" ? "House Upgrade" : "Hotel Upgrade"}
               </div>
               {size !== "small" && card.description && (

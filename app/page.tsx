@@ -44,7 +44,7 @@ export default function Home() {
       try {
         const newUser = await signInAnonymous()
         setUser(newUser)
-      } catch (err) {
+      } catch {
         setError("Failed to authenticate")
         return
       }
@@ -57,7 +57,7 @@ export default function Home() {
     try {
       const newGameId = await createGame(user!.uid, playerName)
       setGameId(newGameId)
-    } catch (err) {
+    } catch {
       setError("Failed to create game")
     } finally {
       setLoading(false)
@@ -69,7 +69,7 @@ export default function Home() {
       try {
         const newUser = await signInAnonymous()
         setUser(newUser)
-      } catch (err) {
+      } catch {
         setError("Failed to authenticate")
         return
       }
@@ -92,7 +92,7 @@ export default function Home() {
       } else {
         setError("Game not found, full, or already started")
       }
-    } catch (err) {
+    } catch {
       setError("Failed to join game")
     } finally {
       setLoading(false)
@@ -104,7 +104,7 @@ export default function Home() {
 
     try {
       await startGame(game.id, user.uid)
-    } catch (err) {
+    } catch {
       setError("Failed to start game")
     }
   }
@@ -121,13 +121,13 @@ export default function Home() {
 
     try {
       await executeGameAction(game.id, {
-        type: action as any,
+        type: action as "DRAW_CARDS" | "PLAY_MONEY" | "PLAY_PROPERTY" | "PLAY_ACTION" | "DISCARD_CARDS" | "END_TURN" | "SAY_NO",
         playerId: user.uid,
         cardIds,
         targetPlayerId: targetId,
         propertyColor,
       })
-    } catch (err) {
+    } catch {
       setError("Failed to execute action")
     }
   }

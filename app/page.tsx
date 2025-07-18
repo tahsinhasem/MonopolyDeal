@@ -1,103 +1,198 @@
-import Image from "next/image";
+"use client"
+
+import { useState, useEffect } from "react"
+import type { User } from "firebase/auth"
+import { onAuthChange, signInAnonymous } from "@/lib/auth"
+import { createGame, joinGame, startGame, subscribeToGame, executeGameAction } from "@/lib/game-service"
+import type { GameState } from "@/lib/types"
+import { Lobby } from "@/components/lobby"
+import { GameRoom } from "@/components/game-room"
+import { GameBoard } from "@/components/game-board"
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [user, setUser] = useState<User | null>(null)
+  const [gameId, setGameId] = useState<string>("")
+  const [game, setGame] = useState<GameState | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string>("")
+  const [rejoiningMessage, setRejoiningMessage] = useState<string>("")
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  useEffect(() => {
+    const unsubscribe = onAuthChange((user) => {
+      setUser(user)
+    })
+
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    if (gameId) {
+      const unsubscribe = subscribeToGame(gameId, (gameData) => {
+        setGame(gameData)
+        if (!gameData) {
+          setGameId("")
+          setError("Game not found")
+        }
+      })
+
+      return unsubscribe
+    }
+  }, [gameId])
+
+  const handleCreateGame = async (playerName: string) => {
+    if (!user) {
+      try {
+        const newUser = await signInAnonymous()
+        setUser(newUser)
+      } catch (err) {
+        setError("Failed to authenticate")
+        return
+      }
+    }
+
+    setLoading(true)
+    setError("")
+    setRejoiningMessage("")
+
+    try {
+      const newGameId = await createGame(user!.uid, playerName)
+      setGameId(newGameId)
+    } catch (err) {
+      setError("Failed to create game")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleJoinGame = async (gameCode: string, playerName: string) => {
+    if (!user) {
+      try {
+        const newUser = await signInAnonymous()
+        setUser(newUser)
+      } catch (err) {
+        setError("Failed to authenticate")
+        return
+      }
+    }
+
+    setLoading(true)
+    setError("")
+    setRejoiningMessage("")
+
+    try {
+      const result = await joinGame(gameCode, user!.uid, playerName)
+
+      if (result.gameId) {
+        setGameId(result.gameId)
+        if (result.isRejoining) {
+          setRejoiningMessage(`Welcome back, ${playerName}! You have rejoined the game.`)
+          // Clear the message after 5 seconds
+          setTimeout(() => setRejoiningMessage(""), 5000)
+        }
+      } else {
+        setError("Game not found, full, or already started")
+      }
+    } catch (err) {
+      setError("Failed to join game")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleStartGame = async () => {
+    if (!game || !user) return
+
+    try {
+      await startGame(game.id, user.uid)
+    } catch (err) {
+      setError("Failed to start game")
+    }
+  }
+
+  const handleLeaveGame = () => {
+    setGameId("")
+    setGame(null)
+    setError("")
+    setRejoiningMessage("")
+  }
+
+  const handleGameAction = async (action: string, cardIds?: string[], targetId?: string, propertyColor?: string) => {
+    if (!game || !user) return
+
+    try {
+      await executeGameAction(game.id, {
+        type: action as any,
+        playerId: user.uid,
+        cardIds,
+        targetPlayerId: targetId,
+        propertyColor,
+      })
+    } catch (err) {
+      setError("Failed to execute action")
+    }
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-red-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={() => {
+              setError("")
+              setGameId("")
+              setGame(null)
+            }}
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            Back to Lobby
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
+    )
+  }
+
+  if (!game) {
+    return <Lobby onCreateGame={handleCreateGame} onJoinGame={handleJoinGame} isLoading={loading} />
+  }
+
+  if (game.status === "waiting") {
+    return (
+      <GameRoom
+        game={game}
+        currentUserId={user?.uid || ""}
+        onStartGame={handleStartGame}
+        onLeaveGame={handleLeaveGame}
+        rejoiningMessage={rejoiningMessage}
+      />
+    )
+  }
+
+  if (game.status === "playing") {
+    return (
+      <GameBoard
+        game={game}
+        currentUserId={user?.uid || ""}
+        onDrawCards={() => handleGameAction("DRAW_CARDS")}
+        onPlayCard={(cardIds, action, targetId, propertyColor) =>
+          handleGameAction(action, cardIds, targetId, propertyColor)
+        }
+        onEndTurn={() => handleGameAction("END_TURN")}
+        onDiscardCards={(cardIds) => handleGameAction("DISCARD_CARDS", cardIds)}
+        rejoiningMessage={rejoiningMessage}
+      />
+    )
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold mb-4">Game Finished!</h1>
+        <button onClick={handleLeaveGame} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+          Back to Lobby
+        </button>
+      </div>
     </div>
-  );
+  )
 }

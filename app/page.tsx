@@ -206,6 +206,7 @@ export default function Home() {
         }
         onEndTurn={() => handleGameAction("END_TURN")}
         onDiscardCards={(cardIds) => handleGameAction("DISCARD_CARDS", cardIds)}
+        onPayDebt={(cardIds) => handleGameAction("PAY_DEBT", cardIds)}
         rejoiningMessage={rejoiningMessage}
       />
     );

@@ -358,10 +358,20 @@ export async function executeGameAction(
 
             case "It's My Birthday":
               // All other players pay 2M
+              const birthdayPendingPayments: Array<{
+                playerId: string;
+                amount: number;
+              }> = [];
+
               Object.keys(gameData.players).forEach((playerId) => {
                 if (playerId !== action.playerId) {
                   const targetPlayer = gameData.players[playerId];
-                  const payment = Math.min(2, targetPlayer.bankValue);
+                  const requiredPayment = 2;
+                  const payment = Math.min(
+                    requiredPayment,
+                    targetPlayer.bankValue
+                  );
+
                   if (payment > 0) {
                     // Transfer money from target to current player
                     const targetBankCards = targetPlayer.bank.slice(0, payment);
@@ -377,17 +387,43 @@ export async function executeGameAction(
                     updates[`players.${action.playerId}.bankValue`] =
                       newCurrentBankValue;
                   }
+
+                  // Check if player still owes money
+                  if (payment < requiredPayment) {
+                    birthdayPendingPayments.push({
+                      playerId,
+                      amount: requiredPayment - payment,
+                    });
+                  }
                 }
               });
+
+              // If there are pending payments, create a pending action for the first player who owes money
+              if (birthdayPendingPayments.length > 0) {
+                const firstDebt = birthdayPendingPayments[0];
+                updates.pendingAction = {
+                  type: "PAY_DEBT",
+                  playerId: action.playerId,
+                  targetId: firstDebt.playerId,
+                  debtAmount: firstDebt.amount,
+                  debtType: "birthday",
+                  canSayNo: false,
+                };
+              }
               break;
 
             case "Debt Collector":
               if (action.targetPlayerId) {
                 const targetPlayer = gameData.players[action.targetPlayerId];
                 if (targetPlayer) {
-                  const payment = Math.min(5, targetPlayer.bankValue);
+                  const requiredPayment = 5;
+                  const payment = Math.min(
+                    requiredPayment,
+                    targetPlayer.bankValue
+                  );
+
                   if (payment > 0) {
-                    // Transfer 5M from target to current player
+                    // Transfer money from target to current player
                     const targetBankCards = targetPlayer.bank.slice(0, payment);
                     const newTargetBank = targetPlayer.bank.slice(payment);
                     const newTargetBankValue = targetPlayer.bankValue - payment;
@@ -401,6 +437,18 @@ export async function executeGameAction(
                     updates[`players.${action.playerId}.bank`] = newCurrentBank;
                     updates[`players.${action.playerId}.bankValue`] =
                       newCurrentBankValue;
+                  }
+
+                  // Check if player still owes money
+                  if (payment < requiredPayment) {
+                    updates.pendingAction = {
+                      type: "PAY_DEBT",
+                      playerId: action.playerId,
+                      targetId: action.targetPlayerId,
+                      debtAmount: requiredPayment - payment,
+                      debtType: "debt_collector",
+                      canSayNo: false,
+                    };
                   }
                 }
               }
@@ -454,6 +502,18 @@ export async function executeGameAction(
                         newCurrentBank;
                       updates[`players.${action.playerId}.bankValue`] =
                         newCurrentBankValue;
+                    }
+
+                    // Check if player still owes rent
+                    if (payment < rentAmount) {
+                      updates.pendingAction = {
+                        type: "PAY_DEBT",
+                        playerId: action.playerId,
+                        targetId: action.targetPlayerId,
+                        debtAmount: rentAmount - payment,
+                        debtType: "rent",
+                        canSayNo: false,
+                      };
                     }
                   }
                 }
@@ -714,6 +774,83 @@ export async function executeGameAction(
             cardId: cardId,
             timestamp: Date.now(),
           };
+        }
+      }
+      break;
+
+    case "PAY_DEBT":
+      // Handle debt payment with cards
+      if (
+        action.cardIds &&
+        gameData.pendingAction &&
+        gameData.pendingAction.targetId === action.playerId
+      ) {
+        const creditorId = gameData.pendingAction.playerId;
+        const creditor = gameData.players[creditorId];
+        const debtor = gameData.players[action.playerId];
+        const debtAmount = gameData.pendingAction.debtAmount || 0;
+
+        if (creditor && debtor && action.cardIds.length > 0) {
+          let totalPaymentValue = 0;
+          const cardsToRemove: string[] = [];
+
+          // Calculate total value of payment cards
+          action.cardIds.forEach((cardId) => {
+            const card = getCard(cardId);
+            if (card && card.value !== undefined) {
+              totalPaymentValue += card.value;
+              cardsToRemove.push(cardId);
+            }
+          });
+
+          if (totalPaymentValue >= debtAmount) {
+            // Remove cards from debtor's bank and properties
+            const newDebtorBank = debtor.bank.filter(
+              (cardId) => !cardsToRemove.includes(cardId)
+            );
+            let newDebtorBankValue = 0;
+            newDebtorBank.forEach((cardId) => {
+              const card = getCard(cardId);
+              if (card && card.value !== undefined) {
+                newDebtorBankValue += card.value;
+              }
+            });
+
+            // Remove property cards
+            const newDebtorProperties = { ...debtor.properties };
+            Object.keys(newDebtorProperties).forEach((color) => {
+              newDebtorProperties[color] = newDebtorProperties[color].filter(
+                (cardId) => !cardsToRemove.includes(cardId)
+              );
+              if (newDebtorProperties[color].length === 0) {
+                delete newDebtorProperties[color];
+              }
+            });
+
+            // Add payment value to creditor's bank (simplified - add as money value)
+            const newCreditorBankValue = creditor.bankValue + debtAmount;
+
+            // Update debtor
+            updates[`players.${action.playerId}.bank`] = newDebtorBank;
+            updates[`players.${action.playerId}.bankValue`] =
+              newDebtorBankValue;
+            updates[`players.${action.playerId}.properties`] =
+              newDebtorProperties;
+
+            // Update creditor
+            updates[`players.${creditorId}.bankValue`] = newCreditorBankValue;
+
+            // Clear pending action
+            updates.pendingAction = null;
+
+            // Set last action for log
+            updates.lastAction = {
+              type: `DEBT_PAID_${gameData.pendingAction.debtType?.toUpperCase()}`,
+              playerId: action.playerId,
+              targetId: creditorId,
+              timestamp: Date.now(),
+            };
+          }
         }
       }
       break;

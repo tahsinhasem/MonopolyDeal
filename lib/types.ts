@@ -34,6 +34,8 @@ export interface GameState {
     targetId?: string
     cardId?: string
     canSayNo: boolean
+    debtAmount?: number
+    debtType?: string
   }
   version: number
   createdAt: number
@@ -41,7 +43,7 @@ export interface GameState {
 }
 
 export interface GameAction {
-  type: "DRAW_CARDS" | "PLAY_MONEY" | "PLAY_PROPERTY" | "PLAY_ACTION" | "DISCARD_CARDS" | "END_TURN" | "SAY_NO"
+  type: "DRAW_CARDS" | "PLAY_MONEY" | "PLAY_PROPERTY" | "PLAY_ACTION" | "DISCARD_CARDS" | "END_TURN" | "SAY_NO" | "PAY_DEBT"
   playerId: string
   cardIds?: string[]
   targetPlayerId?: string

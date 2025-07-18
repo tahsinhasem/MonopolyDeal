@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { getCard, PROPERTY_COLORS } from "@/lib/cards";
 import { ForcedDealModal } from "./forced-deal-modal";
 import { PropertySelectionModal } from "./property-selection-modal";
+import { DebtPaymentModal } from "./debt-payment-modal";
 import { GameAnimation } from "./game-animation";
 import { GameLogs } from "./game-logs";
 
@@ -24,6 +25,7 @@ interface GameBoardProps {
   ) => void;
   onEndTurn: () => void;
   onDiscardCards: (cardIds: string[]) => void;
+  onPayDebt: (cardIds: string[]) => void;
   rejoiningMessage?: string;
 }
 
@@ -50,6 +52,7 @@ export function GameBoard({
   onPlayCard,
   onEndTurn,
   onDiscardCards,
+  onPayDebt,
   rejoiningMessage,
 }: GameBoardProps) {
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
@@ -62,6 +65,7 @@ export function GameBoard({
   const [showForcedDealModal, setShowForcedDealModal] = useState(false);
   const [showPropertySelectionModal, setShowPropertySelectionModal] =
     useState(false);
+  const [showDebtPaymentModal, setShowDebtPaymentModal] = useState(false);
   const [logs, setLogs] = useState<GameLog[]>([]);
   const [currentAnimation, setCurrentAnimation] = useState<Animation | null>(
     null
@@ -83,6 +87,12 @@ export function GameBoard({
   const otherPlayers = Object.values(game.players).filter(
     (p) => p.uid !== currentUserId
   );
+
+  // Check if current player needs to pay debt
+  const needsToPayDebt = game.pendingAction && 
+    game.pendingAction.targetId === currentUserId && 
+    game.pendingAction.debtAmount && 
+    game.pendingAction.debtAmount > currentPlayer.bankValue;
 
   // Handle game state changes for logs and animations
   useEffect(() => {
@@ -152,6 +162,13 @@ export function GameBoard({
       });
     });
   }, [game.players, currentUserId, currentAnimation, shownCompletedSets]);
+
+  // Show debt payment modal when needed
+  useEffect(() => {
+    if (needsToPayDebt && !showDebtPaymentModal) {
+      setShowDebtPaymentModal(true);
+    }
+  }, [needsToPayDebt, showDebtPaymentModal]);
 
   // Reset hand page when hand size changes significantly
   useEffect(() => {
@@ -393,6 +410,7 @@ export function GameBoard({
     setSelectedTargetPlayer("");
     setShowForcedDealModal(false);
     setShowPropertySelectionModal(false);
+    setShowDebtPaymentModal(false);
     setHandCurrentPage(0); // Reset hand page when clearing selection
   };
 
@@ -520,6 +538,11 @@ export function GameBoard({
       );
       resetSelection();
     }
+  };
+
+  const handleDebtPayment = (paymentCards: string[]) => {
+    onPayDebt(paymentCards);
+    setShowDebtPaymentModal(false);
   };
 
   const handleDiscard = () => {
@@ -675,6 +698,30 @@ export function GameBoard({
           <div className="bg-green-100 border border-green-300 rounded-lg p-3 mb-4">
             <p className="text-green-800 text-center font-medium">
               {rejoiningMessage}
+            </p>
+          </div>
+        )}
+
+        {/* Pending Action Notification */}
+        {game.pendingAction && (
+          <div className="bg-orange-100 border border-orange-300 rounded-lg p-3 mb-4">
+            <p className="text-orange-800 text-center font-medium">
+              {game.pendingAction.targetId === currentUserId ? (
+                <>
+                  You owe <strong>${game.pendingAction.debtAmount}M</strong> to{" "}
+                  <strong>{game.players[game.pendingAction.playerId]?.displayName}</strong>
+                  {game.pendingAction.debtAmount && game.pendingAction.debtAmount > currentPlayer.bankValue && (
+                    <span className="text-red-600 ml-2">
+                      (Insufficient funds - must pay with cards!)
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  Waiting for <strong>{game.players[game.pendingAction.targetId || ""]?.displayName}</strong> to{" "}
+                  {game.pendingAction.debtAmount ? `pay $${game.pendingAction.debtAmount}M` : "respond"}
+                </>
+              )}
             </p>
           </div>
         )}
@@ -1130,6 +1177,19 @@ export function GameBoard({
           }
           actionType={selectedCard?.name as "Sly Deal" | "Deal Breaker"}
         />
+
+        {/* Debt Payment Modal */}
+        {game.pendingAction && game.pendingAction.targetId === currentUserId && game.pendingAction.debtAmount && (
+          <DebtPaymentModal
+            isOpen={showDebtPaymentModal}
+            onClose={() => setShowDebtPaymentModal(false)}
+            onConfirm={handleDebtPayment}
+            player={currentPlayer}
+            debtAmount={game.pendingAction.debtAmount}
+            debtType={game.pendingAction.debtType || game.pendingAction.type}
+            creditorName={game.players[game.pendingAction.playerId]?.displayName || "Unknown"}
+          />
+        )}
 
         {/* Game Animation */}
         <GameAnimation

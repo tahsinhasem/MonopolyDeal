@@ -141,7 +141,8 @@ export default function Home() {
           | "PLAY_ACTION"
           | "DISCARD_CARDS"
           | "END_TURN"
-          | "SAY_NO",
+          | "SAY_NO"
+          | "PAY_DEBT",
         playerId: user.uid,
         cardIds,
         targetPlayerId: targetId,

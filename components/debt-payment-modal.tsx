@@ -63,7 +63,7 @@ export function DebtPaymentModal({
       // Check if this is a complete set
       const colorInfo = PROPERTY_COLORS[color as keyof typeof PROPERTY_COLORS];
       const isCompleteSet = colorInfo && cardIds.length === colorInfo.count;
-      
+
       if (!isCompleteSet) {
         cardIds.forEach((cardId) => {
           const card = getCard(cardId);
@@ -114,7 +114,11 @@ export function DebtPaymentModal({
   };
 
   const handleConfirm = () => {
-    if (getTotalSelectedValue() >= debtAmount) {
+    if (
+      getTotalSelectedValue() >= debtAmount ||
+      isSelectingEverything ||
+      hasNoCards
+    ) {
       onConfirm(selectedCards);
       handleClose();
     }
@@ -126,8 +130,21 @@ export function DebtPaymentModal({
   };
 
   const selectedValue = getTotalSelectedValue();
-  const canConfirm = selectedValue >= debtAmount;
+  const totalAvailableValue = availableCards.reduce(
+    (sum, card) => sum + card.value,
+    0
+  );
+  const isSelectingEverything =
+    selectedCards.length === availableCards.length && selectedCards.length > 0;
+  const hasNoCards = availableCards.length === 0;
+  const canPayExactly = selectedValue >= debtAmount;
+  const canPayPartially =
+    isSelectingEverything && totalAvailableValue < debtAmount;
+  const canPayNothing = hasNoCards; // Player has no cards to pay with
+  const canConfirm = canPayExactly || canPayPartially || canPayNothing;
   const overpayment = selectedValue - debtAmount;
+  const isOverpaying = selectedValue > debtAmount;
+  const shortfall = debtAmount - totalAvailableValue;
 
   const getDebtTypeDisplay = () => {
     switch (debtType) {
@@ -157,12 +174,36 @@ export function DebtPaymentModal({
               <strong>${player.bankValue}M</strong> in your bank.
             </p>
             <p className="text-gray-600">
-              Select cards worth at least <strong>${debtAmount}M</strong> to pay the debt.
-              You can use money cards from your bank and property cards.
+              Select cards worth at least <strong>${debtAmount}M</strong> to pay
+              the debt. You can use money cards from your bank and property
+              cards.
             </p>
-            {overpayment > 0 && (
+            {overpayment > 0 && canPayExactly && (
               <p className="text-amber-600 font-medium">
-                ⚠️ You will overpay by ${overpayment}M with the current selection.
+                ⚠️ You will overpay by ${overpayment}M with the current
+                selection.
+                {overpayment <= 2
+                  ? " This is normal when you don't have exact change."
+                  : " Consider if you want to pay this much extra."}
+              </p>
+            )}
+            {hasNoCards && (
+              <p className="text-red-600 font-medium">
+                ⚠️ You have no cards available to pay the debt. The entire $
+                {debtAmount}M debt will be forgiven.
+              </p>
+            )}
+            {canPayPartially && !canPayExactly && !hasNoCards && (
+              <p className="text-red-600 font-medium">
+                ⚠️ You don't have enough cards to pay the full debt. You can
+                only pay ${totalAvailableValue}M of the ${debtAmount}M owed. The
+                remaining ${shortfall}M debt will be forgiven.
+              </p>
+            )}
+            {selectedValue === 0 && availableCards.length > 0 && (
+              <p className="text-blue-600 font-medium">
+                💡 You can select all your available cards if you don't have
+                enough for exact payment.
               </p>
             )}
           </div>
@@ -177,28 +218,56 @@ export function DebtPaymentModal({
             </div>
             <div className="flex justify-between items-center text-lg font-semibold">
               <span>Selected Value:</span>
-              <span className={selectedValue >= debtAmount ? "text-green-600" : "text-gray-600"}>
+              <span
+                className={
+                  selectedValue >= debtAmount
+                    ? "text-green-600"
+                    : canPayPartially && isSelectingEverything
+                    ? "text-orange-600"
+                    : "text-gray-600"
+                }
+              >
                 ${selectedValue}M
               </span>
             </div>
-            {overpayment > 0 && (
+            {overpayment > 0 && canPayExactly && (
               <div className="flex justify-between items-center text-sm text-amber-600">
                 <span>Overpayment:</span>
                 <span>${overpayment}M</span>
               </div>
             )}
+            {hasNoCards && (
+              <div className="flex justify-between items-center text-sm text-red-600">
+                <span>Debt Forgiveness:</span>
+                <span>${debtAmount}M (no cards available)</span>
+              </div>
+            )}
+            {canPayPartially && !canPayExactly && !hasNoCards && (
+              <div className="flex justify-between items-center text-sm text-red-600">
+                <span>Shortfall:</span>
+                <span>${shortfall}M (will be forgiven)</span>
+              </div>
+            )}
           </div>
 
           {/* Auto-select button */}
-          <div className="text-center">
-            <Button
-              onClick={autoSelectOptimal}
-              variant="outline"
-              size="sm"
-            >
-              Auto-select optimal cards
-            </Button>
-          </div>
+          {!hasNoCards && (
+            <div className="text-center space-x-3">
+              <Button onClick={autoSelectOptimal} variant="outline" size="sm">
+                Auto-select optimal cards
+              </Button>
+              <Button
+                onClick={() =>
+                  setSelectedCards(availableCards.map((c) => c.cardId))
+                }
+                variant="outline"
+                size="sm"
+                className="bg-amber-50 hover:bg-amber-100 border-amber-300"
+              >
+                Select all available cards
+              </Button>
+            </div>
+          )}
 
           {/* Available Cards */}
           <div>
@@ -206,9 +275,17 @@ export function DebtPaymentModal({
               Available Cards for Payment
             </h3>
             {availableCards.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">
-                You have no cards available for payment.
-              </p>
+              <div className="text-center py-8 bg-gray-50 rounded-lg">
+                <p className="text-gray-600 text-lg font-medium mb-2">
+                  💳 No cards available for payment
+                </p>
+                <p className="text-gray-500 text-sm">
+                  You have no money in your bank and no incomplete property sets
+                  to pay with.
+                  <br />
+                  The debt will be automatically forgiven.
+                </p>
+              </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {availableCards.map((paymentCard) => {
@@ -229,7 +306,8 @@ export function DebtPaymentModal({
                           ${paymentCard.value}M
                         </p>
                         <p className="text-xs text-gray-500 capitalize">
-                          {paymentCard.type === "property" && paymentCard.propertyColor
+                          {paymentCard.type === "property" &&
+                          paymentCard.propertyColor
                             ? `${paymentCard.propertyColor} property`
                             : paymentCard.type}
                         </p>
@@ -245,16 +323,37 @@ export function DebtPaymentModal({
           {selectedCards.length > 0 && (
             <div className="bg-blue-50 rounded-lg p-4">
               <h4 className="font-semibold mb-2">Selected for Payment:</h4>
-              <div className="flex flex-wrap gap-2">
-                {selectedCards.map((cardId) => {
-                  const paymentCard = availableCards.find((c) => c.cardId === cardId);
-                  return (
-                    <div key={cardId} className="flex items-center gap-1 bg-white rounded px-2 py-1 text-sm">
-                      <span>{getCard(cardId)?.name || "Unknown"}</span>
-                      <span className="font-medium">${paymentCard?.value}M</span>
-                    </div>
-                  );
-                })}
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {selectedCards.map((cardId) => {
+                    const paymentCard = availableCards.find(
+                      (c) => c.cardId === cardId
+                    );
+                    const card = getCard(cardId);
+                    return (
+                      <div
+                        key={cardId}
+                        className="flex items-center gap-1 bg-white rounded px-2 py-1 text-sm"
+                      >
+                        <span>{card?.name || "Unknown"}</span>
+                        <span className="font-medium">
+                          ${paymentCard?.value}M
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          (
+                          {paymentCard?.type === "property"
+                            ? `${paymentCard.propertyColor} property`
+                            : "money"}
+                          )
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="text-sm text-gray-600 mt-2">
+                  💰 Money cards will go to {creditorName}'s bank | 🏠 Property
+                  cards will go to {creditorName}'s properties
+                </div>
               </div>
             </div>
           )}
@@ -270,7 +369,11 @@ export function DebtPaymentModal({
             disabled={!canConfirm}
             className={canConfirm ? "bg-green-600 hover:bg-green-700" : ""}
           >
-            Pay ${selectedValue}M
+            {hasNoCards
+              ? "Accept Debt Forgiveness"
+              : isOverpaying
+              ? `Pay All (${selectedValue}M)`
+              : `Pay ${selectedValue}M`}
           </Button>
         </div>
       </DialogContent>

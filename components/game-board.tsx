@@ -89,9 +89,10 @@ export function GameBoard({
   );
 
   // Check if current player needs to pay debt
-  const needsToPayDebt = game.pendingAction && 
-    game.pendingAction.targetId === currentUserId && 
-    game.pendingAction.debtAmount && 
+  const needsToPayDebt =
+    game.pendingAction &&
+    game.pendingAction.targetId === currentUserId &&
+    game.pendingAction.debtAmount &&
     game.pendingAction.debtAmount > currentPlayer.bankValue;
 
   // Handle game state changes for logs and animations
@@ -273,6 +274,42 @@ export function GameBoard({
           playerName: player.displayName,
           message: `charged rent to ${targetPlayer?.displayName || "someone"}`,
           emoji: "🏠",
+        };
+
+      case "DEBT_PAID_RENT":
+        return {
+          id,
+          timestamp,
+          type: action.type,
+          playerName: player.displayName,
+          message: `paid rent debt to ${
+            targetPlayer?.displayName || "someone"
+          }`,
+          emoji: "💸",
+        };
+
+      case "DEBT_PAID_DEBT_COLLECTOR":
+        return {
+          id,
+          timestamp,
+          type: action.type,
+          playerName: player.displayName,
+          message: `paid debt collection to ${
+            targetPlayer?.displayName || "someone"
+          }`,
+          emoji: "💸",
+        };
+
+      case "DEBT_PAID_BIRTHDAY":
+        return {
+          id,
+          timestamp,
+          type: action.type,
+          playerName: player.displayName,
+          message: `paid birthday money to ${
+            targetPlayer?.displayName || "someone"
+          }`,
+          emoji: "💸",
         };
 
       default:
@@ -709,17 +746,29 @@ export function GameBoard({
               {game.pendingAction.targetId === currentUserId ? (
                 <>
                   You owe <strong>${game.pendingAction.debtAmount}M</strong> to{" "}
-                  <strong>{game.players[game.pendingAction.playerId]?.displayName}</strong>
-                  {game.pendingAction.debtAmount && game.pendingAction.debtAmount > currentPlayer.bankValue && (
-                    <span className="text-red-600 ml-2">
-                      (Insufficient funds - must pay with cards!)
-                    </span>
-                  )}
+                  <strong>
+                    {game.players[game.pendingAction.playerId]?.displayName}
+                  </strong>
+                  {game.pendingAction.debtAmount &&
+                    game.pendingAction.debtAmount > currentPlayer.bankValue && (
+                      <span className="text-red-600 ml-2">
+                        (Insufficient funds - must pay with cards!)
+                      </span>
+                    )}
                 </>
               ) : (
                 <>
-                  Waiting for <strong>{game.players[game.pendingAction.targetId || ""]?.displayName}</strong> to{" "}
-                  {game.pendingAction.debtAmount ? `pay $${game.pendingAction.debtAmount}M` : "respond"}
+                  Waiting for{" "}
+                  <strong>
+                    {
+                      game.players[game.pendingAction.targetId || ""]
+                        ?.displayName
+                    }
+                  </strong>{" "}
+                  to{" "}
+                  {game.pendingAction.debtAmount
+                    ? `pay $${game.pendingAction.debtAmount}M`
+                    : "respond"}
                 </>
               )}
             </p>
@@ -1179,17 +1228,22 @@ export function GameBoard({
         />
 
         {/* Debt Payment Modal */}
-        {game.pendingAction && game.pendingAction.targetId === currentUserId && game.pendingAction.debtAmount && (
-          <DebtPaymentModal
-            isOpen={showDebtPaymentModal}
-            onClose={() => setShowDebtPaymentModal(false)}
-            onConfirm={handleDebtPayment}
-            player={currentPlayer}
-            debtAmount={game.pendingAction.debtAmount}
-            debtType={game.pendingAction.debtType || game.pendingAction.type}
-            creditorName={game.players[game.pendingAction.playerId]?.displayName || "Unknown"}
-          />
-        )}
+        {game.pendingAction &&
+          game.pendingAction.targetId === currentUserId &&
+          game.pendingAction.debtAmount && (
+            <DebtPaymentModal
+              isOpen={showDebtPaymentModal}
+              onClose={() => setShowDebtPaymentModal(false)}
+              onConfirm={handleDebtPayment}
+              player={currentPlayer}
+              debtAmount={game.pendingAction.debtAmount}
+              debtType={game.pendingAction.debtType || game.pendingAction.type}
+              creditorName={
+                game.players[game.pendingAction.playerId]?.displayName ||
+                "Unknown"
+              }
+            />
+          )}
 
         {/* Game Animation */}
         <GameAnimation

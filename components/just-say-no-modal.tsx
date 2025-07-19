@@ -106,7 +106,8 @@ export function JustSayNoModal({
                 💫 You can block this action!
               </h3>
               <p className="text-sm text-gray-600 mb-4 text-center">
-                Select a "Just Say No!" card to cancel {attackerName}'s action
+                Select a &quot;Just Say No!&quot; card to cancel {attackerName}
+                &apos;s action
               </p>
 
               <div className="flex justify-center gap-3">
@@ -131,9 +132,11 @@ export function JustSayNoModal({
           {justSayNoCards.length === 0 && (
             <div className="bg-gray-50 rounded-lg p-4">
               <p className="text-center text-gray-600">
-                💔 You don't have any "Just Say No!" cards to block this action.
+                💔 You don&apos;t have any &quot;Just Say No!&quot; cards to
+                block this action.
                 <br />
-                You must accept the effect of {attackerName}'s {actionType}.
+                You must accept the effect of {attackerName}&apos;s {actionType}
+                .
               </p>
             </div>
           )}

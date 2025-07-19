@@ -195,15 +195,15 @@ export function DebtPaymentModal({
             )}
             {canPayPartially && !canPayExactly && !hasNoCards && (
               <p className="text-red-600 font-medium">
-                ⚠️ You don't have enough cards to pay the full debt. You can
-                only pay ${totalAvailableValue}M of the ${debtAmount}M owed. The
-                remaining ${shortfall}M debt will be forgiven.
+                ⚠️ You don&apos;t have enough cards to pay the full debt. You
+                can only pay ${totalAvailableValue}M of the ${debtAmount}M owed.
+                The remaining ${shortfall}M debt will be forgiven.
               </p>
             )}
             {selectedValue === 0 && availableCards.length > 0 && (
               <p className="text-blue-600 font-medium">
-                💡 You can select all your available cards if you don't have
-                enough for exact payment.
+                💡 You can select all your available cards if you don&apos;t
+                have enough for exact payment.
               </p>
             )}
           </div>
@@ -351,8 +351,8 @@ export function DebtPaymentModal({
                   })}
                 </div>
                 <div className="text-sm text-gray-600 mt-2">
-                  💰 Money cards will go to {creditorName}'s bank | 🏠 Property
-                  cards will go to {creditorName}'s properties
+                  💰 Money cards will go to {creditorName}&apos;s bank | 🏠
+                  Property cards will go to {creditorName}&apos;s properties
                 </div>
               </div>
             </div>

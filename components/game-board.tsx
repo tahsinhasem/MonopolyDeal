@@ -1030,7 +1030,7 @@ export function GameBoard({
                       <strong>
                         {game.players[game.pendingAction.playerId]?.displayName}
                       </strong>
-                      's action
+                      &apos;s action
                     </>
                   )}
                 </>

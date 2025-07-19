@@ -17,6 +17,32 @@ export function generateGameCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
+// Calculate rent including improvements (houses and hotels)
+function calculateRentWithImprovements(
+  properties: string[],
+  improvements: { houses: string[]; hotel?: string } | undefined,
+  colorInfo: (typeof PROPERTY_COLORS)[keyof typeof PROPERTY_COLORS]
+): number {
+  const baseRent =
+    colorInfo.rentValues[
+      Math.min(properties.length - 1, colorInfo.rentValues.length - 1)
+    ];
+
+  if (!improvements) return baseRent;
+
+  let rentBonus = 0;
+
+  // Each house adds 3M rent
+  rentBonus += improvements.houses.length * 3;
+
+  // Hotel adds 5M rent (replaces house bonuses)
+  if (improvements.hotel) {
+    rentBonus = 5; // Hotel overrides house bonuses
+  }
+
+  return baseRent + rentBonus;
+}
+
 export async function createGame(
   hostId: string,
   hostName: string
@@ -30,6 +56,7 @@ export async function createGame(
     hand: drawPile.splice(0, 5),
     bank: [],
     properties: {},
+    improvements: {},
     bankValue: 0,
     completedSets: 0,
     isHost: true,
@@ -133,6 +160,7 @@ export async function joinGame(
         hand: gameData.drawPile.splice(0, 5),
         bank: [],
         properties: {},
+        improvements: {},
         bankValue: 0,
         completedSets: 0,
         isHost: false,
@@ -290,6 +318,78 @@ export async function executeGameAction(
       }
       break;
 
+    case "PLAY_IMPROVEMENT":
+      if (
+        action.cardIds &&
+        action.propertyColor &&
+        gameData.turnPhase === "play" &&
+        gameData.cardsPlayedThisTurn < 3
+      ) {
+        const cardId = action.cardIds[0];
+        const card = getCard(cardId);
+
+        if (
+          card &&
+          (card.type === "house" || card.type === "hotel") &&
+          player.hand.includes(cardId)
+        ) {
+          // Check if property set is complete
+          const currentProperties =
+            player.properties[action.propertyColor] || [];
+          const colorInfo =
+            PROPERTY_COLORS[
+              action.propertyColor as keyof typeof PROPERTY_COLORS
+            ];
+
+          if (colorInfo && currentProperties.length === colorInfo.count) {
+            const newHand = player.hand.filter((id) => id !== cardId);
+            const currentImprovements = player.improvements[
+              action.propertyColor
+            ] || { houses: [], hotel: undefined };
+
+            if (card.type === "house") {
+              // Add house (max 4 houses per set)
+              if (currentImprovements.houses.length < 4) {
+                const newImprovements = {
+                  ...currentImprovements,
+                  houses: [...currentImprovements.houses, cardId],
+                };
+
+                updates[`players.${action.playerId}.hand`] = newHand;
+                updates[
+                  `players.${action.playerId}.improvements.${action.propertyColor}`
+                ] = newImprovements;
+                updates.cardsPlayedThisTurn = gameData.cardsPlayedThisTurn + 1;
+              }
+            } else if (card.type === "hotel") {
+              // Add hotel (requires at least 1 house, replaces all houses)
+              if (
+                currentImprovements.houses.length > 0 &&
+                !currentImprovements.hotel
+              ) {
+                // Move all houses to discard pile
+                const newDiscardPile = [
+                  ...gameData.discardPile,
+                  ...currentImprovements.houses,
+                ];
+                const newImprovements = {
+                  houses: [],
+                  hotel: cardId,
+                };
+
+                updates[`players.${action.playerId}.hand`] = newHand;
+                updates[
+                  `players.${action.playerId}.improvements.${action.propertyColor}`
+                ] = newImprovements;
+                updates.discardPile = newDiscardPile;
+                updates.cardsPlayedThisTurn = gameData.cardsPlayedThisTurn + 1;
+              }
+            }
+          }
+        }
+      }
+      break;
+
     case "END_TURN":
       if (gameData.turnPhase === "play" || gameData.turnPhase === "discard") {
         // Check hand limit
@@ -354,7 +454,7 @@ export async function executeGameAction(
           // Handle specific action cards
           switch (card.name) {
             case "Pass Go":
-              // Draw 2 additional cards
+              // Pass Go doesn't target other players, execute immediately
               const passGoCards = gameData.drawPile.slice(0, 2);
               const newDrawPilePassGo = gameData.drawPile.slice(2);
               updates[`players.${action.playerId}.hand`] = [
@@ -365,7 +465,8 @@ export async function executeGameAction(
               break;
 
             case "It's My Birthday":
-              // All other players pay 2M
+              // Birthday affects all players, but we'll ask for confirmation from each
+              // For now, let's handle it without "Just Say No" (as it affects multiple players)
               const birthdayPendingPayments: Array<{
                 creditorId: string;
                 debtorId: string;
@@ -432,43 +533,16 @@ export async function executeGameAction(
 
             case "Debt Collector":
               if (action.targetPlayerId) {
-                const targetPlayer = gameData.players[action.targetPlayerId];
-                if (targetPlayer) {
-                  const requiredPayment = 5;
-                  const payment = Math.min(
-                    requiredPayment,
-                    targetPlayer.bankValue
-                  );
-
-                  if (payment > 0) {
-                    // Transfer money from target to current player
-                    const targetBankCards = targetPlayer.bank.slice(0, payment);
-                    const newTargetBank = targetPlayer.bank.slice(payment);
-                    const newTargetBankValue = targetPlayer.bankValue - payment;
-                    const newCurrentBank = [...player.bank, ...targetBankCards];
-                    const newCurrentBankValue = player.bankValue + payment;
-
-                    updates[`players.${action.targetPlayerId}.bank`] =
-                      newTargetBank;
-                    updates[`players.${action.targetPlayerId}.bankValue`] =
-                      newTargetBankValue;
-                    updates[`players.${action.playerId}.bank`] = newCurrentBank;
-                    updates[`players.${action.playerId}.bankValue`] =
-                      newCurrentBankValue;
-                  }
-
-                  // Check if player still owes money
-                  if (payment < requiredPayment) {
-                    updates.pendingAction = {
-                      type: "PAY_DEBT",
-                      playerId: action.playerId,
-                      targetId: action.targetPlayerId,
-                      debtAmount: requiredPayment - payment,
-                      debtType: "debt_collector",
-                      canSayNo: false,
-                    };
-                  }
-                }
+                // Create a pending action that asks for confirmation with "Just Say No"
+                updates.pendingAction = {
+                  type: "CONFIRM_ACTION",
+                  playerId: action.playerId,
+                  targetId: action.targetPlayerId,
+                  canSayNo: true,
+                  actionType: "Debt Collector",
+                  actionDescription: `${player.displayName} wants to collect $5M from you using Debt Collector.`,
+                  originalAction: action,
+                };
               }
               break;
 
@@ -485,54 +559,23 @@ export async function executeGameAction(
                       action.propertyColor as keyof typeof PROPERTY_COLORS
                     ];
                   if (colorInfo) {
-                    const rentAmount =
-                      colorInfo.rentValues[
-                        Math.min(
-                          currentPlayerProperties.length - 1,
-                          colorInfo.rentValues.length - 1
-                        )
-                      ];
-                    const payment = Math.min(
-                      rentAmount,
-                      targetPlayer.bankValue
+                    const improvements =
+                      player.improvements[action.propertyColor];
+                    const rentAmount = calculateRentWithImprovements(
+                      currentPlayerProperties,
+                      improvements,
+                      colorInfo
                     );
 
-                    if (payment > 0) {
-                      // Transfer rent from target to current player
-                      const targetBankCards = targetPlayer.bank.slice(
-                        0,
-                        payment
-                      );
-                      const newTargetBank = targetPlayer.bank.slice(payment);
-                      const newTargetBankValue =
-                        targetPlayer.bankValue - payment;
-                      const newCurrentBank = [
-                        ...player.bank,
-                        ...targetBankCards,
-                      ];
-                      const newCurrentBankValue = player.bankValue + payment;
-
-                      updates[`players.${action.targetPlayerId}.bank`] =
-                        newTargetBank;
-                      updates[`players.${action.targetPlayerId}.bankValue`] =
-                        newTargetBankValue;
-                      updates[`players.${action.playerId}.bank`] =
-                        newCurrentBank;
-                      updates[`players.${action.playerId}.bankValue`] =
-                        newCurrentBankValue;
-                    }
-
-                    // Check if player still owes rent
-                    if (payment < rentAmount) {
-                      updates.pendingAction = {
-                        type: "PAY_DEBT",
-                        playerId: action.playerId,
-                        targetId: action.targetPlayerId,
-                        debtAmount: rentAmount - payment,
-                        debtType: "rent",
-                        canSayNo: false,
-                      };
-                    }
+                    updates.pendingAction = {
+                      type: "CONFIRM_ACTION",
+                      playerId: action.playerId,
+                      targetId: action.targetPlayerId,
+                      canSayNo: true,
+                      actionType: card.name,
+                      actionDescription: `${player.displayName} wants to charge you $${rentAmount}M rent for ${colorInfo.name} properties.`,
+                      originalAction: action,
+                    };
                   }
                 }
               }
@@ -548,33 +591,24 @@ export async function executeGameAction(
                   const targetProperties =
                     targetPlayer.properties[action.propertyColor];
                   if (targetProperties.length > 0) {
-                    // Steal one property (take the first one)
-                    const stolenProperty = targetProperties[0];
-                    const newTargetProperties = targetProperties.slice(1);
-                    const currentPlayerProperties =
-                      player.properties[action.propertyColor] || [];
-                    const newCurrentProperties = [
-                      ...currentPlayerProperties,
-                      stolenProperty,
-                    ];
+                    const colorInfo =
+                      PROPERTY_COLORS[
+                        action.propertyColor as keyof typeof PROPERTY_COLORS
+                      ];
 
-                    if (newTargetProperties.length === 0) {
-                      // Remove the color entirely if no properties left
-                      const newTargetPropertiesObj = {
-                        ...targetPlayer.properties,
-                      };
-                      delete newTargetPropertiesObj[action.propertyColor];
-                      updates[`players.${action.targetPlayerId}.properties`] =
-                        newTargetPropertiesObj;
-                    } else {
-                      updates[
-                        `players.${action.targetPlayerId}.properties.${action.propertyColor}`
-                      ] = newTargetProperties;
-                    }
-
-                    updates[
-                      `players.${action.playerId}.properties.${action.propertyColor}`
-                    ] = newCurrentProperties;
+                    updates.pendingAction = {
+                      type: "CONFIRM_ACTION",
+                      playerId: action.playerId,
+                      targetId: action.targetPlayerId,
+                      canSayNo: true,
+                      actionType: "Sly Deal",
+                      actionDescription: `${
+                        player.displayName
+                      } wants to steal one of your ${
+                        colorInfo?.name || action.propertyColor
+                      } properties.`,
+                      originalAction: action,
+                    };
                   }
                 }
               }
@@ -594,44 +628,29 @@ export async function executeGameAction(
                       action.propertyColor as keyof typeof PROPERTY_COLORS
                     ];
 
-                  // Only steal complete sets
+                  // Only allow stealing complete sets
                   if (
                     colorInfo &&
                     targetProperties.length === colorInfo.count
                   ) {
-                    // Steal the entire property set
-                    const currentPlayerProperties =
-                      player.properties[action.propertyColor] || [];
-                    const newCurrentProperties = [
-                      ...currentPlayerProperties,
-                      ...targetProperties,
-                    ];
-
-                    // Remove the set from target player
-                    const newTargetPropertiesObj = {
-                      ...targetPlayer.properties,
+                    updates.pendingAction = {
+                      type: "CONFIRM_ACTION",
+                      playerId: action.playerId,
+                      targetId: action.targetPlayerId,
+                      canSayNo: true,
+                      actionType: "Deal Breaker",
+                      actionDescription: `${player.displayName} wants to steal your complete ${colorInfo.name} property set!`,
+                      originalAction: action,
                     };
-                    delete newTargetPropertiesObj[action.propertyColor];
-
-                    updates[`players.${action.targetPlayerId}.properties`] =
-                      newTargetPropertiesObj;
-                    updates[`players.${action.targetPlayerId}.completedSets`] =
-                      targetPlayer.completedSets - 1;
-                    updates[
-                      `players.${action.playerId}.properties.${action.propertyColor}`
-                    ] = newCurrentProperties;
-
-                    // Check if current player now has a complete set
-                    if (newCurrentProperties.length === colorInfo.count) {
-                      updates[`players.${action.playerId}.completedSets`] =
-                        player.completedSets + 1;
-                    }
                   }
                 }
               }
               break;
 
             case "Forced Deal":
+              console.log("Forced Deal case - creating pending action");
+              console.log("action:", action);
+              console.log("action.cardIds:", action.cardIds);
               if (
                 action.targetPlayerId &&
                 action.cardIds &&
@@ -639,6 +658,10 @@ export async function executeGameAction(
               ) {
                 const targetPlayer = gameData.players[action.targetPlayerId];
                 const [, myPropertyId, targetPropertyId] = action.cardIds;
+
+                console.log("targetPlayer:", targetPlayer);
+                console.log("myPropertyId:", myPropertyId);
+                console.log("targetPropertyId:", targetPropertyId);
 
                 if (targetPlayer) {
                   // Find which colors these properties belong to
@@ -664,124 +687,33 @@ export async function executeGameAction(
                   );
 
                   if (myPropertyColor && targetPropertyColor) {
-                    // Remove my property from my collection
-                    const myCurrentProperties =
-                      player.properties[myPropertyColor] || [];
-                    const myNewProperties = myCurrentProperties.filter(
-                      (id) => id !== myPropertyId
-                    );
+                    const myColorInfo =
+                      PROPERTY_COLORS[
+                        myPropertyColor as keyof typeof PROPERTY_COLORS
+                      ];
+                    const targetColorInfo =
+                      PROPERTY_COLORS[
+                        targetPropertyColor as keyof typeof PROPERTY_COLORS
+                      ];
 
-                    // Remove target property from target's collection
-                    const targetCurrentProperties =
-                      targetPlayer.properties[targetPropertyColor] || [];
-                    const targetNewProperties = targetCurrentProperties.filter(
-                      (id) => id !== targetPropertyId
-                    );
-
-                    // Add target's property to my collection
-                    const myNewTargetColorProperties = [
-                      ...(player.properties[targetPropertyColor] || []),
-                      targetPropertyId,
-                    ];
-
-                    // Add my property to target's collection
-                    const targetNewMyColorProperties = [
-                      ...(targetPlayer.properties[myPropertyColor] || []),
-                      myPropertyId,
-                    ];
-
-                    // Update my properties
-                    if (myNewProperties.length === 0) {
-                      const newMyProperties = { ...player.properties };
-                      delete newMyProperties[myPropertyColor];
-                      updates[`players.${action.playerId}.properties`] =
-                        newMyProperties;
-                    } else {
-                      updates[
-                        `players.${action.playerId}.properties.${myPropertyColor}`
-                      ] = myNewProperties;
-                    }
-                    updates[
-                      `players.${action.playerId}.properties.${targetPropertyColor}`
-                    ] = myNewTargetColorProperties;
-
-                    // Update target's properties
-                    if (targetNewProperties.length === 0) {
-                      const newTargetProperties = {
-                        ...targetPlayer.properties,
-                      };
-                      delete newTargetProperties[targetPropertyColor];
-                      updates[`players.${action.targetPlayerId}.properties`] =
-                        newTargetProperties;
-                    } else {
-                      updates[
-                        `players.${action.targetPlayerId}.properties.${targetPropertyColor}`
-                      ] = targetNewProperties;
-                    }
-                    updates[
-                      `players.${action.targetPlayerId}.properties.${myPropertyColor}`
-                    ] = targetNewMyColorProperties;
-
-                    // Recalculate completed sets for both players
-                    let myCompletedSets = 0;
-                    let targetCompletedSets = 0;
-
-                    // Count my completed sets
-                    const myUpdatedProperties = {
-                      ...player.properties,
-                      [targetPropertyColor]: myNewTargetColorProperties,
-                      ...(myNewProperties.length === 0
-                        ? {}
-                        : { [myPropertyColor]: myNewProperties }),
+                    updates.pendingAction = {
+                      type: "CONFIRM_ACTION",
+                      playerId: action.playerId,
+                      targetId: action.targetPlayerId,
+                      canSayNo: true,
+                      actionType: "Forced Deal",
+                      actionDescription: `${
+                        player.displayName
+                      } wants to trade their ${
+                        myColorInfo?.name || myPropertyColor
+                      } property for your ${
+                        targetColorInfo?.name || targetPropertyColor
+                      } property.`,
+                      originalAction: action,
                     };
-                    if (myNewProperties.length === 0) {
-                      delete myUpdatedProperties[myPropertyColor];
-                    }
-
-                    Object.entries(myUpdatedProperties).forEach(
-                      ([color, cardIds]) => {
-                        const colorInfo =
-                          PROPERTY_COLORS[
-                            color as keyof typeof PROPERTY_COLORS
-                          ];
-                        if (colorInfo && cardIds.length === colorInfo.count) {
-                          myCompletedSets++;
-                        }
-                      }
-                    );
-
-                    // Count target's completed sets
-                    const targetUpdatedProperties = {
-                      ...targetPlayer.properties,
-                      [myPropertyColor]: targetNewMyColorProperties,
-                      ...(targetNewProperties.length === 0
-                        ? {}
-                        : { [targetPropertyColor]: targetNewProperties }),
-                    };
-                    if (targetNewProperties.length === 0) {
-                      delete targetUpdatedProperties[targetPropertyColor];
-                    }
-
-                    Object.entries(targetUpdatedProperties).forEach(
-                      ([color, cardIds]) => {
-                        const colorInfo =
-                          PROPERTY_COLORS[
-                            color as keyof typeof PROPERTY_COLORS
-                          ];
-                        if (colorInfo && cardIds.length === colorInfo.count) {
-                          targetCompletedSets++;
-                        }
-                      }
-                    );
-
-                    updates[`players.${action.playerId}.completedSets`] =
-                      myCompletedSets;
-                    updates[`players.${action.targetPlayerId}.completedSets`] =
-                      targetCompletedSets;
                   }
                 }
               }
-              break;
           }
 
           // Set last action for game log
@@ -793,6 +725,468 @@ export async function executeGameAction(
             timestamp: Date.now(),
           };
         }
+      }
+      break;
+
+    case "SAY_NO":
+      // Handle "Just Say No!" card usage
+      if (
+        action.cardIds &&
+        action.cardIds.length > 0 &&
+        gameData.pendingAction &&
+        gameData.pendingAction.targetId === action.playerId &&
+        gameData.pendingAction.canSayNo
+      ) {
+        const justSayNoCardId = action.cardIds[0];
+        const card = getCard(justSayNoCardId);
+
+        if (
+          card &&
+          card.name === "Just Say No!" &&
+          player.hand.includes(justSayNoCardId)
+        ) {
+          // Remove the "Just Say No!" card from player's hand
+          const newHand = player.hand.filter((id) => id !== justSayNoCardId);
+          const newDiscardPile = [...gameData.discardPile, justSayNoCardId];
+
+          updates[`players.${action.playerId}.hand`] = newHand;
+          updates.discardPile = newDiscardPile;
+
+          // Cancel the pending action
+          updates.pendingAction = null;
+
+          // Set last action for log
+          updates.lastAction = {
+            type: "JUST_SAY_NO",
+            playerId: action.playerId,
+            targetId: gameData.pendingAction.playerId,
+            cardId: justSayNoCardId,
+            timestamp: Date.now(),
+          };
+        }
+      }
+      break;
+
+    case "ACCEPT_ACTION":
+      console.log("ACCEPT_ACTION case reached");
+      console.log("gameData.pendingAction:", gameData.pendingAction);
+      console.log("action.playerId:", action.playerId);
+
+      // Handle accepting the action without playing "Just Say No!"
+      if (
+        gameData.pendingAction &&
+        gameData.pendingAction.targetId === action.playerId &&
+        gameData.pendingAction.canSayNo &&
+        gameData.pendingAction.originalAction
+      ) {
+        console.log("All validation conditions met");
+        // Execute the original action
+        const originalAction = gameData.pendingAction.originalAction;
+        const attacker = gameData.players[originalAction.playerId];
+        const defender = gameData.players[action.playerId];
+
+        console.log("originalAction:", originalAction);
+        console.log("attacker:", attacker);
+        console.log("defender:", defender);
+
+        if (attacker && defender) {
+          // Execute based on the original action type
+          const originalCard = getCard(originalAction.cardIds?.[0] || "");
+
+          console.log("originalCard:", originalCard);
+
+          if (originalCard) {
+            switch (originalCard.name) {
+              case "Debt Collector":
+                const requiredPayment = 5;
+                const payment = Math.min(requiredPayment, defender.bankValue);
+
+                if (payment > 0) {
+                  // Transfer money from defender to attacker
+                  const targetBankCards = defender.bank.slice(0, payment);
+                  const newTargetBank = defender.bank.slice(payment);
+                  const newTargetBankValue = defender.bankValue - payment;
+                  const newCurrentBank = [...attacker.bank, ...targetBankCards];
+                  const newCurrentBankValue = attacker.bankValue + payment;
+
+                  updates[`players.${action.playerId}.bank`] = newTargetBank;
+                  updates[`players.${action.playerId}.bankValue`] =
+                    newTargetBankValue;
+                  updates[`players.${originalAction.playerId}.bank`] =
+                    newCurrentBank;
+                  updates[`players.${originalAction.playerId}.bankValue`] =
+                    newCurrentBankValue;
+                }
+
+                // Check if player still owes money
+                if (payment < requiredPayment) {
+                  updates.pendingAction = {
+                    type: "PAY_DEBT",
+                    playerId: originalAction.playerId,
+                    targetId: action.playerId,
+                    debtAmount: requiredPayment - payment,
+                    debtType: "debt_collector",
+                    canSayNo: false,
+                  };
+                } else {
+                  updates.pendingAction = null;
+                }
+                break;
+
+              case "Rent":
+              case "Wild Rent":
+                if (originalAction.propertyColor) {
+                  const currentPlayerProperties =
+                    attacker.properties[originalAction.propertyColor] || [];
+
+                  if (currentPlayerProperties.length > 0) {
+                    const colorInfo =
+                      PROPERTY_COLORS[
+                        originalAction.propertyColor as keyof typeof PROPERTY_COLORS
+                      ];
+                    if (colorInfo) {
+                      const improvements =
+                        attacker.improvements[originalAction.propertyColor];
+                      const rentAmount = calculateRentWithImprovements(
+                        currentPlayerProperties,
+                        improvements,
+                        colorInfo
+                      );
+                      const rentPayment = Math.min(
+                        rentAmount,
+                        defender.bankValue
+                      );
+
+                      if (rentPayment > 0) {
+                        const targetBankCards = defender.bank.slice(
+                          0,
+                          rentPayment
+                        );
+                        const newTargetBank = defender.bank.slice(rentPayment);
+                        const newTargetBankValue =
+                          defender.bankValue - rentPayment;
+                        const newCurrentBank = [
+                          ...attacker.bank,
+                          ...targetBankCards,
+                        ];
+                        const newCurrentBankValue =
+                          attacker.bankValue + rentPayment;
+
+                        updates[`players.${action.playerId}.bank`] =
+                          newTargetBank;
+                        updates[`players.${action.playerId}.bankValue`] =
+                          newTargetBankValue;
+                        updates[`players.${originalAction.playerId}.bank`] =
+                          newCurrentBank;
+                        updates[
+                          `players.${originalAction.playerId}.bankValue`
+                        ] = newCurrentBankValue;
+                      }
+
+                      // Check if player still owes rent
+                      if (rentPayment < rentAmount) {
+                        updates.pendingAction = {
+                          type: "PAY_DEBT",
+                          playerId: originalAction.playerId,
+                          targetId: action.playerId,
+                          debtAmount: rentAmount - rentPayment,
+                          debtType: "rent",
+                          canSayNo: false,
+                        };
+                      } else {
+                        updates.pendingAction = null;
+                      }
+                    }
+                  }
+                }
+                break;
+
+              case "Sly Deal":
+                if (
+                  originalAction.propertyColor &&
+                  defender.properties[originalAction.propertyColor]
+                ) {
+                  const targetProperties =
+                    defender.properties[originalAction.propertyColor];
+                  if (targetProperties.length > 0) {
+                    // Steal one property (take the first one)
+                    const stolenProperty = targetProperties[0];
+                    const newTargetProperties = targetProperties.slice(1);
+                    const currentPlayerProperties =
+                      attacker.properties[originalAction.propertyColor] || [];
+                    const newCurrentProperties = [
+                      ...currentPlayerProperties,
+                      stolenProperty,
+                    ];
+
+                    if (newTargetProperties.length === 0) {
+                      // Remove the color entirely if no properties left
+                      const newTargetPropertiesObj = { ...defender.properties };
+                      delete newTargetPropertiesObj[
+                        originalAction.propertyColor
+                      ];
+                      updates[`players.${action.playerId}.properties`] =
+                        newTargetPropertiesObj;
+                    } else {
+                      updates[
+                        `players.${action.playerId}.properties.${originalAction.propertyColor}`
+                      ] = newTargetProperties;
+                    }
+
+                    updates[
+                      `players.${originalAction.playerId}.properties.${originalAction.propertyColor}`
+                    ] = newCurrentProperties;
+                  }
+                }
+                updates.pendingAction = null;
+                break;
+
+              case "Deal Breaker":
+                if (
+                  originalAction.propertyColor &&
+                  defender.properties[originalAction.propertyColor]
+                ) {
+                  const targetProperties =
+                    defender.properties[originalAction.propertyColor];
+                  const colorInfo =
+                    PROPERTY_COLORS[
+                      originalAction.propertyColor as keyof typeof PROPERTY_COLORS
+                    ];
+
+                  // Only steal complete sets
+                  if (
+                    colorInfo &&
+                    targetProperties.length === colorInfo.count
+                  ) {
+                    // Steal the entire property set
+                    const currentPlayerProperties =
+                      attacker.properties[originalAction.propertyColor] || [];
+                    const newCurrentProperties = [
+                      ...currentPlayerProperties,
+                      ...targetProperties,
+                    ];
+
+                    // Transfer improvements along with the property set
+                    const targetImprovements =
+                      defender.improvements[originalAction.propertyColor];
+                    if (targetImprovements) {
+                      updates[
+                        `players.${originalAction.playerId}.improvements.${originalAction.propertyColor}`
+                      ] = targetImprovements;
+
+                      // Remove improvements from defender
+                      const newTargetImprovements = {
+                        ...defender.improvements,
+                      };
+                      delete newTargetImprovements[
+                        originalAction.propertyColor
+                      ];
+                      updates[`players.${action.playerId}.improvements`] =
+                        newTargetImprovements;
+                    }
+
+                    // Remove the set from target player
+                    const newTargetPropertiesObj = { ...defender.properties };
+                    delete newTargetPropertiesObj[originalAction.propertyColor];
+
+                    updates[`players.${action.playerId}.properties`] =
+                      newTargetPropertiesObj;
+                    updates[`players.${action.playerId}.completedSets`] =
+                      defender.completedSets - 1;
+                    updates[
+                      `players.${originalAction.playerId}.properties.${originalAction.propertyColor}`
+                    ] = newCurrentProperties;
+
+                    // Check if attacker now has a complete set
+                    if (newCurrentProperties.length === colorInfo.count) {
+                      updates[
+                        `players.${originalAction.playerId}.completedSets`
+                      ] = attacker.completedSets + 1;
+                    }
+                  }
+                }
+                updates.pendingAction = null;
+                break;
+
+              case "Forced Deal":
+                if (
+                  originalAction.cardIds &&
+                  originalAction.cardIds.length === 3
+                ) {
+                  const [, myPropertyId, targetPropertyId] =
+                    originalAction.cardIds;
+
+                  // Find which colors these properties belong to
+                  let myPropertyColor = "";
+                  let targetPropertyColor = "";
+
+                  // Find attacker's property color
+                  Object.entries(attacker.properties).forEach(
+                    ([color, cardIds]) => {
+                      if (cardIds.includes(myPropertyId)) {
+                        myPropertyColor = color;
+                      }
+                    }
+                  );
+
+                  // Find defender's property color
+                  Object.entries(defender.properties).forEach(
+                    ([color, cardIds]) => {
+                      if (cardIds.includes(targetPropertyId)) {
+                        targetPropertyColor = color;
+                      }
+                    }
+                  );
+
+                  if (myPropertyColor && targetPropertyColor) {
+                    // Execute the property trade
+                    const myCurrentProperties =
+                      attacker.properties[myPropertyColor] || [];
+                    const myNewProperties = myCurrentProperties.filter(
+                      (id) => id !== myPropertyId
+                    );
+
+                    const targetCurrentProperties =
+                      defender.properties[targetPropertyColor] || [];
+                    const targetNewProperties = targetCurrentProperties.filter(
+                      (id) => id !== targetPropertyId
+                    );
+
+                    // Add defender's property to attacker's collection
+                    const myNewTargetColorProperties = [
+                      ...(attacker.properties[targetPropertyColor] || []),
+                      targetPropertyId,
+                    ];
+
+                    // Add attacker's property to defender's collection
+                    const targetNewMyColorProperties = [
+                      ...(defender.properties[myPropertyColor] || []),
+                      myPropertyId,
+                    ];
+
+                    // Update attacker's properties
+                    if (myNewProperties.length === 0) {
+                      const newMyProperties = { ...attacker.properties };
+                      delete newMyProperties[myPropertyColor];
+                      updates[`players.${originalAction.playerId}.properties`] =
+                        newMyProperties;
+                    } else {
+                      updates[
+                        `players.${originalAction.playerId}.properties.${myPropertyColor}`
+                      ] = myNewProperties;
+                    }
+                    updates[
+                      `players.${originalAction.playerId}.properties.${targetPropertyColor}`
+                    ] = myNewTargetColorProperties;
+
+                    // Update defender's properties
+                    if (targetNewProperties.length === 0) {
+                      const newTargetProperties = { ...defender.properties };
+                      delete newTargetProperties[targetPropertyColor];
+                      updates[`players.${action.playerId}.properties`] =
+                        newTargetProperties;
+                    } else {
+                      updates[
+                        `players.${action.playerId}.properties.${targetPropertyColor}`
+                      ] = targetNewProperties;
+                    }
+                    updates[
+                      `players.${action.playerId}.properties.${myPropertyColor}`
+                    ] = targetNewMyColorProperties;
+
+                    // Recalculate completed sets for both players
+                    let attackerCompletedSets = 0;
+                    let defenderCompletedSets = 0;
+
+                    // Count attacker's completed sets
+                    const attackerUpdatedProperties = {
+                      ...attacker.properties,
+                      [targetPropertyColor]: myNewTargetColorProperties,
+                      ...(myNewProperties.length === 0
+                        ? {}
+                        : { [myPropertyColor]: myNewProperties }),
+                    };
+                    if (myNewProperties.length === 0) {
+                      delete attackerUpdatedProperties[myPropertyColor];
+                    }
+
+                    Object.entries(attackerUpdatedProperties).forEach(
+                      ([color, cardIds]) => {
+                        const colorInfo =
+                          PROPERTY_COLORS[
+                            color as keyof typeof PROPERTY_COLORS
+                          ];
+                        if (colorInfo && cardIds.length === colorInfo.count) {
+                          attackerCompletedSets++;
+                        }
+                      }
+                    );
+
+                    // Count defender's completed sets
+                    const defenderUpdatedProperties = {
+                      ...defender.properties,
+                      [myPropertyColor]: targetNewMyColorProperties,
+                      ...(targetNewProperties.length === 0
+                        ? {}
+                        : { [targetPropertyColor]: targetNewProperties }),
+                    };
+                    if (targetNewProperties.length === 0) {
+                      delete defenderUpdatedProperties[targetPropertyColor];
+                    }
+
+                    Object.entries(defenderUpdatedProperties).forEach(
+                      ([color, cardIds]) => {
+                        const colorInfo =
+                          PROPERTY_COLORS[
+                            color as keyof typeof PROPERTY_COLORS
+                          ];
+                        if (colorInfo && cardIds.length === colorInfo.count) {
+                          defenderCompletedSets++;
+                        }
+                      }
+                    );
+
+                    updates[
+                      `players.${originalAction.playerId}.completedSets`
+                    ] = attackerCompletedSets;
+                    updates[`players.${action.playerId}.completedSets`] =
+                      defenderCompletedSets;
+                  }
+                }
+                updates.pendingAction = null;
+                break;
+            }
+
+            // Set last action for log
+            updates.lastAction = {
+              type: `${originalCard.name.toUpperCase()}_ACCEPTED`,
+              playerId: originalAction.playerId,
+              targetId: action.playerId,
+              cardId: originalAction.cardIds?.[0],
+              timestamp: Date.now(),
+            };
+          }
+        } else {
+          console.log("Attacker or defender not found");
+          console.log("originalAction.playerId:", originalAction.playerId);
+          console.log("action.playerId:", action.playerId);
+          // Attacker or defender not found, clear the pending action
+          updates.pendingAction = null;
+        }
+      } else {
+        console.log("Validation conditions not met:");
+        console.log("- pendingAction exists:", !!gameData.pendingAction);
+        console.log(
+          "- targetId matches:",
+          gameData.pendingAction?.targetId === action.playerId
+        );
+        console.log("- canSayNo:", gameData.pendingAction?.canSayNo);
+        console.log(
+          "- originalAction exists:",
+          !!gameData.pendingAction?.originalAction
+        );
+        // Validation conditions not met, clear the pending action
+        updates.pendingAction = null;
       }
       break;
 

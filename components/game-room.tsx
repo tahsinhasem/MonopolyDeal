@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import type { GameState } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Copy, Users, Crown } from "lucide-react";
+import { Copy, Users, Crown, Check } from "lucide-react";
 import { CardBack } from "@/components/card-back";
 
 interface GameRoomProps {
@@ -21,6 +22,7 @@ export function GameRoom({
   onLeaveGame,
   rejoiningMessage,
 }: GameRoomProps) {
+  const [isCopied, setIsCopied] = useState(false);
   const players = Object.values(game.players);
   const isHost = game.hostId === currentUserId;
   const canStart = players.length >= 2 && isHost;
@@ -28,6 +30,9 @@ export function GameRoom({
   const copyGameCode = async () => {
     try {
       await navigator.clipboard.writeText(game.gameCode);
+      setIsCopied(true);
+      // Reset the copied state after 2 seconds
+      setTimeout(() => setIsCopied(false), 2000);
     } catch {
       // Fallback for older browsers
       const textArea = document.createElement("textarea");
@@ -36,6 +41,9 @@ export function GameRoom({
       textArea.select();
       document.execCommand("copy");
       document.body.removeChild(textArea);
+      setIsCopied(true);
+      // Reset the copied state after 2 seconds
+      setTimeout(() => setIsCopied(false), 2000);
     }
   };
 
@@ -52,9 +60,17 @@ export function GameRoom({
               onClick={copyGameCode}
               variant="outline"
               size="sm"
-              className="p-2 bg-transparent"
+              className={`p-2 transition-colors duration-200 ${
+                isCopied
+                  ? "bg-green-100 border-green-300 text-green-600"
+                  : "bg-transparent"
+              }`}
             >
-              <Copy className="w-4 h-4" />
+              {isCopied ? (
+                <Check className="w-4 h-4" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
             </Button>
           </div>
           <p className="text-sm text-gray-600 mt-2">

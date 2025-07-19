@@ -89,7 +89,7 @@ export function ForcedDealModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-1/2 max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">
             Forced Deal with {targetPlayerName}

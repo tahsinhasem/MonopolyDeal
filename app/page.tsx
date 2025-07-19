@@ -126,7 +126,7 @@ export default function Home() {
 
   const handleGameAction = async (
     action: string,
-    cardIds?: string[],
+    cardIds: string[] = [],
     targetId?: string,
     propertyColor?: string
   ) => {
@@ -142,6 +142,7 @@ export default function Home() {
           | "DISCARD_CARDS"
           | "END_TURN"
           | "SAY_NO"
+          | "ACCEPT_ACTION"
           | "PAY_DEBT",
         playerId: user.uid,
         cardIds,
@@ -150,6 +151,34 @@ export default function Home() {
       });
     } catch {
       setError("Failed to execute action");
+    }
+  };
+
+  const handleSayNo = async (justSayNoCardId?: string) => {
+    if (!game || !user || !justSayNoCardId) return;
+
+    try {
+      await executeGameAction(game.id, {
+        type: "SAY_NO",
+        playerId: user.uid,
+        cardIds: [justSayNoCardId],
+      });
+    } catch {
+      setError("Failed to play Just Say No!");
+    }
+  };
+
+  const handleAcceptAction = async () => {
+    if (!game || !user) return;
+
+    try {
+      await executeGameAction(game.id, {
+        type: "ACCEPT_ACTION",
+        playerId: user.uid,
+      });
+    } catch (error) {
+      console.error("Error in handleAcceptAction:", error);
+      setError("Failed to accept action");
     }
   };
 
@@ -208,6 +237,8 @@ export default function Home() {
         onEndTurn={() => handleGameAction("END_TURN")}
         onDiscardCards={(cardIds) => handleGameAction("DISCARD_CARDS", cardIds)}
         onPayDebt={(cardIds) => handleGameAction("PAY_DEBT", cardIds)}
+        onSayNo={handleSayNo}
+        onAcceptAction={handleAcceptAction}
         rejoiningMessage={rejoiningMessage}
       />
     );

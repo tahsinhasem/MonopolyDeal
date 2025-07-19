@@ -10,6 +10,7 @@ import { getCard, PROPERTY_COLORS } from "@/lib/cards";
 import { ForcedDealModal } from "./forced-deal-modal";
 import { PropertySelectionModal } from "./property-selection-modal";
 import { DebtPaymentModal } from "./debt-payment-modal";
+import { JustSayNoModal } from "./just-say-no-modal";
 import { GameAnimation } from "./game-animation";
 import { GameLogs } from "./game-logs";
 
@@ -26,6 +27,8 @@ interface GameBoardProps {
   onEndTurn: () => void;
   onDiscardCards: (cardIds: string[]) => void;
   onPayDebt: (cardIds: string[]) => void;
+  onSayNo: (justSayNoCardId?: string) => void;
+  onAcceptAction: () => void;
   rejoiningMessage?: string;
 }
 
@@ -53,6 +56,8 @@ export function GameBoard({
   onEndTurn,
   onDiscardCards,
   onPayDebt,
+  onSayNo,
+  onAcceptAction,
   rejoiningMessage,
 }: GameBoardProps) {
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
@@ -66,6 +71,7 @@ export function GameBoard({
   const [showPropertySelectionModal, setShowPropertySelectionModal] =
     useState(false);
   const [showDebtPaymentModal, setShowDebtPaymentModal] = useState(false);
+  const [showJustSayNoModal, setShowJustSayNoModal] = useState(false);
   const [logs, setLogs] = useState<GameLog[]>([]);
   const [currentAnimation, setCurrentAnimation] = useState<Animation | null>(
     null
@@ -81,6 +87,10 @@ export function GameBoard({
     Set<string>
   >(new Set());
   const [handCurrentPage, setHandCurrentPage] = useState<number>(0);
+  const [waitingForConfirmation, setWaitingForConfirmation] = useState<{
+    actionType: string;
+    targetPlayerName: string;
+  } | null>(null);
 
   const currentPlayer = game.players[currentUserId];
   const isCurrentTurn = game.currentTurnPlayerId === currentUserId;
@@ -170,6 +180,28 @@ export function GameBoard({
       setShowDebtPaymentModal(true);
     }
   }, [needsToPayDebt, showDebtPaymentModal]);
+
+  // Show Just Say No modal when a "Just Say No"-able action is pending
+  useEffect(() => {
+    const needsJustSayNoConfirmation =
+      game.pendingAction &&
+      game.pendingAction.targetId === currentUserId &&
+      game.pendingAction.canSayNo &&
+      game.pendingAction.type === "CONFIRM_ACTION";
+
+    if (needsJustSayNoConfirmation && !showJustSayNoModal) {
+      setShowJustSayNoModal(true);
+    } else if (!needsJustSayNoConfirmation && showJustSayNoModal) {
+      setShowJustSayNoModal(false);
+    }
+  }, [game.pendingAction, currentUserId, showJustSayNoModal]);
+
+  // Clear waiting state when pending action starts or game state changes
+  useEffect(() => {
+    if (game.pendingAction || game.currentTurnPlayerId !== currentUserId) {
+      setWaitingForConfirmation(null);
+    }
+  }, [game.pendingAction, game.currentTurnPlayerId, currentUserId]);
 
   // Reset hand page when hand size changes significantly
   useEffect(() => {
@@ -414,12 +446,20 @@ export function GameBoard({
           if (!shownWildcardAnimations.has(cardId)) {
             setCurrentAnimation({
               type: "WILDCARD",
-              emoji: "🌈",
-              message: "Wildcard Property!",
+              emoji: card.name === "Super Wildcard" ? "⭐" : "🌈",
+              message:
+                card.name === "Super Wildcard"
+                  ? "Super Wildcard Property!"
+                  : "Wildcard Property!",
               playerName: currentPlayer.displayName,
             });
             setShownWildcardAnimations((prev) => new Set([...prev, cardId]));
           }
+        }
+
+        // Check if it's a house or hotel card that needs property color selection
+        if (card.type === "house" || card.type === "hotel") {
+          setShowColorPicker(true);
         }
 
         // Check if it's an action card that needs target selection
@@ -448,6 +488,8 @@ export function GameBoard({
     setShowForcedDealModal(false);
     setShowPropertySelectionModal(false);
     setShowDebtPaymentModal(false);
+    setShowJustSayNoModal(false);
+    setWaitingForConfirmation(null);
     setHandCurrentPage(0); // Reset hand page when clearing selection
   };
 
@@ -506,6 +548,18 @@ export function GameBoard({
     }
   };
 
+  const handlePlayAsImprovement = () => {
+    if (selectedCards.length === 1 && selectedPropertyColor) {
+      onPlayCard(
+        selectedCards,
+        "PLAY_IMPROVEMENT",
+        undefined,
+        selectedPropertyColor
+      );
+      resetSelection();
+    }
+  };
+
   const handlePlayAsAction = () => {
     if (selectedCards.length === 1 && selectedCard) {
       // Special handling for Forced Deal
@@ -537,6 +591,25 @@ export function GameBoard({
         return; // Need property selection
       }
 
+      // Set waiting state for actions that require target confirmation
+      const actionsRequiringConfirmation = [
+        "Debt Collector",
+        "Rent",
+        "Wild Rent",
+        "It's My Birthday",
+      ];
+
+      if (
+        actionsRequiringConfirmation.includes(selectedCard.name) &&
+        selectedTargetPlayer
+      ) {
+        setWaitingForConfirmation({
+          actionType: selectedCard.name,
+          targetPlayerName:
+            game.players[selectedTargetPlayer]?.displayName || "Unknown",
+        });
+      }
+
       onPlayCard(
         selectedCards,
         "PLAY_ACTION",
@@ -552,6 +625,15 @@ export function GameBoard({
     targetPropertyId: string
   ) => {
     if (selectedCards.length === 1) {
+      // Set waiting state for Forced Deal
+      if (selectedTargetPlayer) {
+        setWaitingForConfirmation({
+          actionType: "Forced Deal",
+          targetPlayerName:
+            game.players[selectedTargetPlayer]?.displayName || "Unknown",
+        });
+      }
+
       // We'll pass both property IDs in the cardIds array for the Forced Deal
       onPlayCard(
         [selectedCards[0], myPropertyId, targetPropertyId],
@@ -567,6 +649,15 @@ export function GameBoard({
     propertyColor: string
   ) => {
     if (selectedCards.length === 1) {
+      // Set waiting state for Sly Deal and Deal Breaker
+      if (selectedTargetPlayer && selectedCard) {
+        setWaitingForConfirmation({
+          actionType: selectedCard.name,
+          targetPlayerName:
+            game.players[selectedTargetPlayer]?.displayName || "Unknown",
+        });
+      }
+
       onPlayCard(
         selectedCards,
         "PLAY_ACTION",
@@ -582,6 +673,18 @@ export function GameBoard({
     setShowDebtPaymentModal(false);
   };
 
+  const handleJustSayNo = (justSayNoCardId?: string) => {
+    if (justSayNoCardId) {
+      onSayNo(justSayNoCardId);
+    }
+    setShowJustSayNoModal(false);
+  };
+
+  const handleAcceptAction = () => {
+    onAcceptAction();
+    setShowJustSayNoModal(false);
+  };
+
   const handleDiscard = () => {
     if (selectedCards.length > 0) {
       onDiscardCards(selectedCards);
@@ -594,7 +697,10 @@ export function GameBoard({
       selectedCard &&
       (selectedCard.type === "money" ||
         selectedCard.type === "action" ||
-        selectedCard.type === "property")
+        selectedCard.type === "property" ||
+        selectedCard.type === "house" ||
+        selectedCard.type === "hotel" ||
+        selectedCard.type === "rent")
     );
   };
 
@@ -635,6 +741,44 @@ export function GameBoard({
     return true;
   };
 
+  const canPlayAsImprovement = () => {
+    if (
+      !selectedCard ||
+      (selectedCard.type !== "house" && selectedCard.type !== "hotel")
+    ) {
+      return false;
+    }
+
+    // Need to select a property color first
+    if (!selectedPropertyColor) return false;
+
+    const currentPlayerProperties =
+      currentPlayer.properties[selectedPropertyColor] || [];
+    const colorInfo =
+      PROPERTY_COLORS[selectedPropertyColor as keyof typeof PROPERTY_COLORS];
+
+    // Property set must be complete
+    if (!colorInfo || currentPlayerProperties.length !== colorInfo.count) {
+      return false;
+    }
+
+    const currentImprovements = currentPlayer.improvements?.[
+      selectedPropertyColor
+    ] || { houses: [], hotel: undefined };
+
+    if (selectedCard.type === "house") {
+      // Can add house if less than 4 houses
+      return currentImprovements.houses.length < 4;
+    } else if (selectedCard.type === "hotel") {
+      // Can add hotel if has at least 1 house and no hotel yet
+      return (
+        currentImprovements.houses.length > 0 && !currentImprovements.hotel
+      );
+    }
+
+    return false;
+  };
+
   const getPlayerPropertySets = (player: Player) => {
     return Object.entries(player.properties)
       .map(([color, cardIds]) => {
@@ -655,12 +799,28 @@ export function GameBoard({
   };
 
   const getAvailablePropertyColors = () => {
+    // For House and Hotel cards, show only complete property sets
+    if (selectedCard?.type === "house" || selectedCard?.type === "hotel") {
+      return Object.keys(currentPlayer.properties).filter((color) => {
+        const properties = currentPlayer.properties[color];
+        const colorInfo =
+          PROPERTY_COLORS[color as keyof typeof PROPERTY_COLORS];
+        return colorInfo && properties.length === colorInfo.count;
+      });
+    }
+
     if (selectedCard?.name === "Rent" || selectedCard?.name === "Wild Rent") {
       // For rent cards, show colors the current player owns
       return Object.keys(currentPlayer.properties).filter(
         (color) => currentPlayer.properties[color].length > 0
       );
     }
+
+    // For property cards including wildcards, show all possible colors
+    if (selectedCard?.type === "property" && selectedCard?.colors) {
+      return selectedCard.colors;
+    }
+
     return Object.keys(PROPERTY_COLORS);
   };
 
@@ -679,16 +839,60 @@ export function GameBoard({
       case "Rent":
       case "Wild Rent":
         return "Select a target player and property color to charge rent.";
+      case "House":
+        return "Select a property color below to place a house on a complete set. Houses add +3M rent each (max 4 per set).";
+      case "Hotel":
+        return "Select a property color below to place a hotel on a complete set. Hotels add +5M rent and replace all houses.";
       default:
         return "";
     }
   };
 
   return (
-    <div className="min-h-screen bg-green-800 p-2 md:p-4">
+    <div
+      className="min-h-screen p-2 md:p-4 transition-all duration-300"
+      style={{
+        background: isCurrentTurn
+          ? "linear-gradient(to bottom right, #15803d, #14532d)"
+          : "linear-gradient(to bottom right, #374151, #111827)",
+        boxShadow: isCurrentTurn
+          ? "inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)"
+          : "none",
+      }}
+    >
       <div className="max-w-7xl mx-auto">
+        {/* Turn Status Banner */}
+        <div
+          className="rounded-lg p-3 mb-4 text-center transition-all duration-300 text-white shadow-lg"
+          style={{
+            background: isCurrentTurn
+              ? "linear-gradient(to right, #4ade80, #16a34a)"
+              : "linear-gradient(to right, #9ca3af, #6b7280)",
+            animation: isCurrentTurn ? "pulse 2s infinite" : "none",
+          }}
+        >
+          <div className="flex items-center justify-center gap-2">
+            <span className="text-lg font-bold">
+              {isCurrentTurn ? "🎮 YOUR TURN!" : "⏳ Waiting..."}
+            </span>
+            <span className="text-sm opacity-90">
+              {isCurrentTurn
+                ? "Make your move!"
+                : `${
+                    game.players[game.currentTurnPlayerId]?.displayName
+                  }'s turn`}
+            </span>
+          </div>
+        </div>
+
         {/* Game Header */}
-        <div className="bg-white rounded-lg p-3 md:p-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div
+          className={`bg-white rounded-lg p-3 md:p-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 transition-all duration-300 ${
+            isCurrentTurn
+              ? "border-4 border-green-400 shadow-lg"
+              : "border-2 border-gray-300"
+          }`}
+        >
           <div className="min-w-0 flex-1">
             <h1 className="text-xl md:text-2xl font-bold truncate">
               Monopoly Deal
@@ -739,36 +943,133 @@ export function GameBoard({
           </div>
         )}
 
+        {/* Waiting for Confirmation Message */}
+        {waitingForConfirmation && !game.pendingAction && (
+          <div className="bg-blue-100 border border-blue-300 rounded-lg p-3 mb-4">
+            <p className="text-blue-800 text-center font-medium">
+              <span className="animate-pulse">⏳</span> Action initiated!
+              Waiting for{" "}
+              <strong>{waitingForConfirmation.targetPlayerName}</strong> to
+              respond to your{" "}
+              <strong>{waitingForConfirmation.actionType}</strong>
+              <br />
+              <span className="text-sm">
+                {["Sly Deal", "Deal Breaker", "Forced Deal"].includes(
+                  waitingForConfirmation.actionType
+                )
+                  ? "They can use 'Just Say No!' or proceed with the action"
+                  : "They will be prompted to respond"}
+              </span>
+            </p>
+          </div>
+        )}
+
         {/* Pending Action Notification */}
         {game.pendingAction && (
           <div className="bg-orange-100 border border-orange-300 rounded-lg p-3 mb-4">
             <p className="text-orange-800 text-center font-medium">
               {game.pendingAction.targetId === currentUserId ? (
                 <>
-                  You owe <strong>${game.pendingAction.debtAmount}M</strong> to{" "}
-                  <strong>
-                    {game.players[game.pendingAction.playerId]?.displayName}
-                  </strong>
-                  {game.pendingAction.debtAmount &&
-                    game.pendingAction.debtAmount > currentPlayer.bankValue && (
-                      <span className="text-red-600 ml-2">
-                        (Insufficient funds - must pay with cards!)
+                  {/* Target player view - different messages based on action type */}
+                  {game.pendingAction.debtAmount ? (
+                    <>
+                      You owe <strong>${game.pendingAction.debtAmount}M</strong>{" "}
+                      to{" "}
+                      <strong>
+                        {game.players[game.pendingAction.playerId]?.displayName}
+                      </strong>
+                      {game.pendingAction.debtAmount >
+                        currentPlayer.bankValue && (
+                        <span className="text-red-600 ml-2">
+                          (Insufficient funds - must pay with cards!)
+                        </span>
+                      )}
+                    </>
+                  ) : game.pendingAction.type === "CONFIRM_ACTION" ? (
+                    <>
+                      <strong>
+                        {game.players[game.pendingAction.playerId]?.displayName}
+                      </strong>{" "}
+                      wants to{" "}
+                      <strong>
+                        {game.pendingAction.actionType === "Sly Deal" &&
+                          "steal a property from you"}
+                        {game.pendingAction.actionType === "Deal Breaker" &&
+                          "steal a complete property set from you"}
+                        {game.pendingAction.actionType === "Forced Deal" &&
+                          "trade properties with you"}
+                        {game.pendingAction.actionType === "Debt Collector" &&
+                          "collect 5M from you"}
+                        {game.pendingAction.actionType === "Rent" &&
+                          "charge you rent"}
+                        {game.pendingAction.actionType === "Wild Rent" &&
+                          "charge you rent"}
+                        {game.pendingAction.actionType === "It's My Birthday" &&
+                          "collect birthday money from you"}
+                        {![
+                          "Sly Deal",
+                          "Deal Breaker",
+                          "Forced Deal",
+                          "Debt Collector",
+                          "Rent",
+                          "Wild Rent",
+                          "It's My Birthday",
+                        ].includes(game.pendingAction.actionType || "") &&
+                          "use an action card on you"}
+                      </strong>
+                      <br />
+                      <span className="text-sm">
+                        {game.pendingAction.canSayNo
+                          ? "You can use 'Just Say No!' or accept the action"
+                          : "You must respond to this action"}
                       </span>
-                    )}
+                    </>
+                  ) : (
+                    <>
+                      You need to respond to{" "}
+                      <strong>
+                        {game.players[game.pendingAction.playerId]?.displayName}
+                      </strong>
+                      's action
+                    </>
+                  )}
                 </>
               ) : (
                 <>
-                  Waiting for{" "}
-                  <strong>
-                    {
-                      game.players[game.pendingAction.targetId || ""]
-                        ?.displayName
-                    }
-                  </strong>{" "}
-                  to{" "}
-                  {game.pendingAction.debtAmount
-                    ? `pay $${game.pendingAction.debtAmount}M`
-                    : "respond"}
+                  {/* Attacker/waiting player view */}
+                  {game.pendingAction.type === "CONFIRM_ACTION" ? (
+                    <>
+                      ⏳ Waiting for{" "}
+                      <strong>
+                        {
+                          game.players[game.pendingAction.targetId || ""]
+                            ?.displayName
+                        }
+                      </strong>{" "}
+                      to respond to your{" "}
+                      <strong>{game.pendingAction.actionType}</strong>
+                      <br />
+                      <span className="text-sm">
+                        {game.pendingAction.canSayNo
+                          ? "They can use 'Just Say No!' or accept your action"
+                          : "Waiting for their response..."}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      Waiting for{" "}
+                      <strong>
+                        {
+                          game.players[game.pendingAction.targetId || ""]
+                            ?.displayName
+                        }
+                      </strong>{" "}
+                      to{" "}
+                      {game.pendingAction.debtAmount
+                        ? `pay $${game.pendingAction.debtAmount}M`
+                        : "respond"}
+                    </>
+                  )}
                 </>
               )}
             </p>
@@ -779,95 +1080,117 @@ export function GameBoard({
           {/* Other Players */}
           <div className="lg:col-span-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-              {otherPlayers.map((player) => (
-                <Card
-                  key={player.uid}
-                  className={`bg-white cursor-pointer transition-all min-w-0 ${
-                    selectedTargetPlayer === player.uid
-                      ? "ring-2 ring-blue-500"
-                      : ""
-                  }`}
-                  onClick={() => {
-                    if (showTargetPicker) {
-                      setSelectedTargetPlayer(player.uid);
-                    }
-                  }}
-                >
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base md:text-lg flex items-center justify-between min-w-0">
-                      <span className="truncate flex-1 mr-2">
-                        {player.displayName}
-                      </span>
-                      <Badge
-                        variant={
-                          player.completedSets >= 3 ? "default" : "secondary"
-                        }
-                        className="flex-shrink-0"
-                      >
-                        {player.completedSets}/3 sets
-                      </Badge>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="min-w-0">
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-medium flex-shrink-0">
-                          Hand:
+              {otherPlayers.map((player) => {
+                const isPlayersTurn = game.currentTurnPlayerId === player.uid;
+                return (
+                  <Card
+                    key={player.uid}
+                    className={`cursor-pointer transition-all min-w-0 ${
+                      selectedTargetPlayer === player.uid
+                        ? "ring-2 ring-blue-500"
+                        : ""
+                    }`}
+                    style={{
+                      backgroundColor: isPlayersTurn ? "#fefce8" : "#ffffff",
+                      border: isPlayersTurn
+                        ? "4px solid #facc15"
+                        : "1px solid #e5e7eb",
+                      boxShadow: isPlayersTurn
+                        ? "0 10px 15px -3px rgba(0, 0, 0, 0.1)"
+                        : "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+                    }}
+                    onClick={() => {
+                      if (showTargetPicker) {
+                        setSelectedTargetPlayer(player.uid);
+                      }
+                    }}
+                  >
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base md:text-lg flex items-center justify-between min-w-0">
+                        <span className="truncate flex-1 mr-2 flex items-center gap-2">
+                          {isPlayersTurn && (
+                            <span className="text-yellow-600">🎮</span>
+                          )}
+                          {player.displayName}
+                          {isPlayersTurn && (
+                            <span className="text-xs text-yellow-600 font-normal">
+                              (Playing)
+                            </span>
+                          )}
                         </span>
-                        <div className="flex gap-1 overflow-hidden flex-1">
-                          {Array.from({
-                            length: Math.min(player.hand.length, 3),
-                          }).map((_, i) => (
-                            <CardBack
-                              key={i}
-                              size="small"
-                              className="flex-shrink-0"
-                            />
-                          ))}
-                          {player.hand.length > 3 && (
-                            <span className="text-xs text-gray-600 ml-1 whitespace-nowrap">
-                              +{player.hand.length - 3}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="text-sm font-medium">
-                        Bank: ${player.bankValue}M
-                      </div>
-
-                      {getPlayerPropertySets(player).map((set) => (
-                        <div key={set.color} className="text-sm min-w-0">
-                          <div className="flex justify-between items-center min-w-0">
-                            <span className="font-medium capitalize truncate flex-1 mr-2">
-                              {PROPERTY_COLORS[
-                                set.color as keyof typeof PROPERTY_COLORS
-                              ]?.name || set.color}
-                              :
-                            </span>
-                            <span
-                              className={`${
-                                set.isComplete ? "text-green-600 font-bold" : ""
-                              } whitespace-nowrap flex-shrink-0`}
-                            >
-                              {set.count}/{set.maxCount}
-                              {set.isComplete && " ✓"}
-                            </span>
+                        <Badge
+                          variant={
+                            player.completedSets >= 3 ? "default" : "secondary"
+                          }
+                          className="flex-shrink-0"
+                        >
+                          {player.completedSets}/3 sets
+                        </Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="min-w-0">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm font-medium flex-shrink-0">
+                            Hand:
+                          </span>
+                          <div className="flex gap-1 overflow-hidden flex-1">
+                            {Array.from({
+                              length: Math.min(player.hand.length, 3),
+                            }).map((_, i) => (
+                              <CardBack
+                                key={i}
+                                size="small"
+                                className="flex-shrink-0"
+                              />
+                            ))}
+                            {player.hand.length > 3 && (
+                              <span className="text-xs text-gray-600 ml-1 whitespace-nowrap">
+                                +{player.hand.length - 3}
+                              </span>
+                            )}
                           </div>
-                          {set.isComplete && (
-                            <div className="text-xs text-green-600 truncate">
-                              Rent:{" "}
-                              {set.rentValues
-                                .map((rent, i) => `${i + 1}=${rent}M`)
-                                .join(", ")}
-                            </div>
-                          )}
                         </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+
+                        <div className="text-sm font-medium">
+                          Bank: ${player.bankValue}M
+                        </div>
+
+                        {getPlayerPropertySets(player).map((set) => (
+                          <div key={set.color} className="text-sm min-w-0">
+                            <div className="flex justify-between items-center min-w-0">
+                              <span className="font-medium capitalize truncate flex-1 mr-2">
+                                {PROPERTY_COLORS[
+                                  set.color as keyof typeof PROPERTY_COLORS
+                                ]?.name || set.color}
+                                :
+                              </span>
+                              <span
+                                className={`${
+                                  set.isComplete
+                                    ? "text-green-600 font-bold"
+                                    : ""
+                                } whitespace-nowrap flex-shrink-0`}
+                              >
+                                {set.count}/{set.maxCount}
+                                {set.isComplete && " ✓"}
+                              </span>
+                            </div>
+                            {set.isComplete && (
+                              <div className="text-xs text-green-600 truncate">
+                                Rent:{" "}
+                                {set.rentValues
+                                  .map((rent, i) => `${i + 1}=${rent}M`)
+                                  .join(", ")}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </div>
 
@@ -878,9 +1201,30 @@ export function GameBoard({
         </div>
 
         {/* Current Player Area */}
-        <div className="bg-white rounded-lg p-6">
+        <div
+          className="rounded-lg p-6 transition-all duration-300"
+          style={{
+            backgroundColor: isCurrentTurn ? "#f0fdf4" : "#f9fafb",
+            border: isCurrentTurn ? "4px solid #4ade80" : "2px solid #d1d5db",
+            boxShadow: isCurrentTurn
+              ? "0 25px 50px -12px rgba(0, 0, 0, 0.25)"
+              : "0 1px 3px 0 rgba(0, 0, 0, 0.1)",
+          }}
+        >
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold">Your Area</h2>
+            <h2
+              className={`text-xl font-bold flex items-center gap-2 ${
+                isCurrentTurn ? "text-green-700" : "text-gray-700"
+              }`}
+            >
+              {isCurrentTurn && <span className="text-green-600">🎮</span>}
+              Your Area
+              {isCurrentTurn && (
+                <span className="text-sm text-green-600 font-normal">
+                  (Your Turn!)
+                </span>
+              )}
+            </h2>
             <div className="flex items-center gap-4">
               <span className="text-lg font-semibold">
                 Bank: ${currentPlayer.bankValue}M
@@ -929,6 +1273,40 @@ export function GameBoard({
                           .join(", ")}
                       </div>
                     )}
+                    {/* Display improvements */}
+                    {set.isComplete &&
+                      currentPlayer.improvements &&
+                      currentPlayer.improvements[set.color] && (
+                        <div className="text-sm text-blue-600 font-medium mb-2">
+                          <div className="flex flex-wrap gap-1">
+                            {currentPlayer.improvements[set.color].houses?.map(
+                              (houseId, index) => (
+                                <span
+                                  key={houseId}
+                                  className="bg-blue-100 px-2 py-1 rounded text-xs"
+                                >
+                                  🏠 House {index + 1}
+                                </span>
+                              )
+                            )}
+                            {currentPlayer.improvements[set.color].hotel && (
+                              <span className="bg-red-100 px-2 py-1 rounded text-xs">
+                                🏨 Hotel
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs mt-1">
+                            Bonus: +
+                            {(currentPlayer.improvements[set.color].houses
+                              ?.length || 0) *
+                              3 +
+                              (currentPlayer.improvements[set.color].hotel
+                                ? 5
+                                : 0)}
+                            M rent
+                          </div>
+                        </div>
+                      )}
                     <div className="flex gap-2 flex-wrap overflow-hidden">
                       {set.cards.map((cardId) => (
                         <GameCard
@@ -1069,12 +1447,37 @@ export function GameBoard({
                     <label className="block text-sm font-medium mb-2">
                       Choose Target Player:
                     </label>
-                    <div className="text-sm text-gray-600 mb-2">
-                      Click on a player above to select them as the target
+
+                    {/* Dropdown Selection */}
+                    <div className="mb-3">
+                      <select
+                        value={selectedTargetPlayer}
+                        onChange={(e) =>
+                          setSelectedTargetPlayer(e.target.value)
+                        }
+                        className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="" disabled>
+                          Select a target player...
+                        </option>
+                        {otherPlayers.map((player) => (
+                          <option key={player.uid} value={player.uid}>
+                            {player.displayName} ({player.completedSets}/3 sets,
+                            ${player.bankValue}M)
+                          </option>
+                        ))}
+                      </select>
                     </div>
+
+                    {/* Alternative: Click to Select */}
+                    <div className="text-xs text-gray-500 mb-2">
+                      💡 You can also click on a player card above to select
+                      them
+                    </div>
+
                     {selectedTargetPlayer && (
-                      <div className="text-sm text-green-600">
-                        Selected:{" "}
+                      <div className="text-sm text-green-600 bg-green-50 border border-green-200 rounded p-2">
+                        ✅ Selected:{" "}
                         {game.players[selectedTargetPlayer]?.displayName}
                       </div>
                     )}
@@ -1084,9 +1487,23 @@ export function GameBoard({
                 {/* Property Color Selection (for Rent cards only) */}
                 {(showColorPicker || showPropertyPicker) && (
                   <div className="mb-4">
+                    {/* Super Wildcard Instructions */}
+                    {showColorPicker &&
+                      selectedCard?.name === "Super Wildcard" && (
+                        <div className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                          <p className="text-sm text-purple-800">
+                            <strong>⭐ Super Wildcard:</strong> This card can be
+                            used as any property color! Choose which property
+                            set you want to add it to.
+                          </p>
+                        </div>
+                      )}
+
                     <label className="block text-sm font-medium mb-2">
                       {showColorPicker
-                        ? "Choose Property Color:"
+                        ? selectedCard?.name === "Super Wildcard"
+                          ? "Choose any Property Color (Super Wildcard):"
+                          : "Choose Property Color:"
                         : "Choose Property Color to Target:"}
                     </label>
                     <div className="flex gap-2 flex-wrap">
@@ -1134,6 +1551,17 @@ export function GameBoard({
                       size="lg"
                     >
                       🏠 Play as Property
+                    </Button>
+                  )}
+
+                  {canPlayAsImprovement() && (
+                    <Button
+                      onClick={handlePlayAsImprovement}
+                      disabled={game.cardsPlayedThisTurn >= 3}
+                      variant="outline"
+                      size="lg"
+                    >
+                      🏗️ Play as Improvement
                     </Button>
                   )}
 
@@ -1242,6 +1670,26 @@ export function GameBoard({
                 game.players[game.pendingAction.playerId]?.displayName ||
                 "Unknown"
               }
+            />
+          )}
+
+        {/* Just Say No Modal */}
+        {game.pendingAction &&
+          game.pendingAction.targetId === currentUserId &&
+          game.pendingAction.canSayNo &&
+          game.pendingAction.type === "CONFIRM_ACTION" && (
+            <JustSayNoModal
+              isOpen={showJustSayNoModal}
+              onClose={() => setShowJustSayNoModal(false)}
+              onConfirm={handleJustSayNo}
+              onDecline={handleAcceptAction}
+              player={currentPlayer}
+              actionDescription={game.pendingAction.actionDescription || ""}
+              attackerName={
+                game.players[game.pendingAction.playerId]?.displayName ||
+                "Unknown"
+              }
+              actionType={game.pendingAction.actionType || "Unknown Action"}
             />
           )}
 

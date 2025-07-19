@@ -4,6 +4,7 @@ export interface Player {
   hand: string[];
   bank: string[];
   properties: Record<string, string[]>;
+  improvements: Record<string, { houses: string[]; hotel?: string }>; // Track houses and hotels on property sets
   bankValue: number;
   completedSets: number;
   isHost: boolean;
@@ -36,6 +37,9 @@ export interface GameState {
     canSayNo: boolean;
     debtAmount?: number;
     debtType?: string;
+    actionType?: string; // The original action type (e.g., "Rent", "Sly Deal")
+    actionDescription?: string; // Human readable description
+    originalAction?: GameAction; // Store the original action for re-execution
   };
   pendingPayments?: Array<{
     creditorId: string;
@@ -54,9 +58,11 @@ export interface GameAction {
     | "PLAY_MONEY"
     | "PLAY_PROPERTY"
     | "PLAY_ACTION"
+    | "PLAY_IMPROVEMENT"
     | "DISCARD_CARDS"
     | "END_TURN"
     | "SAY_NO"
+    | "ACCEPT_ACTION"
     | "PAY_DEBT";
   playerId: string;
   cardIds?: string[];

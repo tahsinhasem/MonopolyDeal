@@ -28,7 +28,7 @@ export function GameLogs({ logs }: GameLogsProps) {
   };
 
   return (
-    <Card className={isExpanded ? "h-80" : "h-auto"}>
+    <Card className={isExpanded ? "h-[26rem]" : "h-auto"}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
@@ -50,7 +50,7 @@ export function GameLogs({ logs }: GameLogsProps) {
       </CardHeader>
       {isExpanded && (
         <CardContent className="p-0">
-          <ScrollArea className="h-64 px-4">
+          <ScrollArea className="h-80 px-4">
             <div className="space-y-2">
               {logs.length === 0 ? (
                 <p className="text-gray-500 text-sm text-center py-4">
